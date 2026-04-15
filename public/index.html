@@ -76,7 +76,6 @@
   .copy-btn.copied { border-color: #1D9E75; color: #1D9E75; background: #081a12; }
   .data-ts { font-size: 10px; color: #333; }
 
-  /* ── CONSOLIDATED SUMMARY BAR ── */
   .consolidated-bar { border-radius: 12px; padding: 14px 16px; margin-bottom: 12px; border: 1.5px solid; }
   .consolidated-bar-title { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px; font-weight: 500; }
   .consolidated-stats { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; }
@@ -87,9 +86,8 @@
   .pool-status-row { display: flex; align-items: center; gap: 8px; font-size: 11px; }
   .pool-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
 
-  /* ── PAIR TABS ── */
   .pair-tabs-wrap { margin-bottom: 12px; }
-  .pair-tabs-header { display: flex; gap: 0; border-bottom: 0.5px solid #1e2530; margin-bottom: 0; overflow-x: auto; }
+  .pair-tabs-header { display: flex; gap: 0; border-bottom: 0.5px solid #1e2530; overflow-x: auto; }
   .pair-tab { padding: 9px 16px; font-size: 12px; cursor: pointer; border-bottom: 2px solid transparent; color: #555; white-space: nowrap; display: flex; align-items: center; gap: 6px; transition: color 0.15s; }
   .pair-tab:hover { color: #999; }
   .pair-tab.active { color: #e0e0e0; border-bottom-color: #1D9E75; }
@@ -110,7 +108,6 @@
   .stat.alert-yellow { border-color: #EF9F2744; background: #1f1208; }
   .stat.alert-red { border-color: #E24B4A44; background: #200808; }
 
-  /* ── AUTHORITIES ── */
   .auth-card { background: #060a10; border: 0.5px solid #1e2530; border-radius: 8px; padding: 10px 12px; }
   .auth-label { font-size: 10px; color: #555; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
   .auth-row { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
@@ -121,9 +118,15 @@
   .auth-loading { font-size: 11px; color: #444; display: flex; align-items: center; gap: 6px; padding: 4px 0; }
   .auth-spinner { width: 10px; height: 10px; border: 1.5px solid #1e2530; border-top-color: #1D9E75; border-radius: 50%; animation: spin 0.8s linear infinite; flex-shrink: 0; }
 
-  /* ── RUG CONFIRM HINT ── */
-  .rug-confirm-hint { background: #1a0a0a; border: 0.5px solid #5a151533; border-radius: 8px; padding: 10px 14px; margin-top: 8px; font-size: 11px; color: #888; line-height: 1.6; }
-  .rug-confirm-link { color: #E24B4A; text-decoration: underline; cursor: pointer; }
+  .rug-confirm-hint { background: #130808; border: 0.5px solid #5a151533; border-radius: 8px; padding: 12px 14px; margin-top: 8px; font-size: 11px; color: #999; line-height: 1.8; }
+  .rug-confirm-hint strong { color: #e0e0e0; }
+  .rug-confirm-hint ol { margin: 8px 0 8px 16px; }
+  .rug-confirm-hint ol li { margin-bottom: 4px; }
+  .rug-confirm-link { color: #E24B4A; text-decoration: underline; }
+
+  .liq-disclaimer { font-size: 10px; color: #444; margin-top: 8px; display: flex; align-items: center; gap: 5px; }
+  .liq-disclaimer a { color: #555; text-decoration: underline; }
+  .liq-disclaimer a:hover { color: #888; }
 
   .bar-wrap { height: 4px; border-radius: 2px; background: #1e2530; overflow: hidden; margin-top: 6px; }
   .bar-fill { height: 100%; border-radius: 2px; }
@@ -160,7 +163,7 @@
   <div class="header-left">
     <div class="header-logo">R</div>
     <div>
-      <div class="header-title">Rug Pull Detector <span style="font-size:10px;color:#444;font-weight:400">v5.1</span></div>
+      <div class="header-title">Rug Pull Detector <span style="font-size:10px;color:#444;font-weight:400">v5.2</span></div>
       <div class="header-sub">Token Risk Analyzer · Solana</div>
     </div>
   </div>
@@ -189,6 +192,9 @@ var analysisTime = null;
 var currentAddress = null;
 var sessionHistory = [];
 var allPairsData = [];
+
+// Proxy base URL — same origin as the DexScreener proxy
+var PROXY_BASE = 'https://okx-rugpull-proxy.vercel.app';
 
 // ─────────────────────────────────────────────
 // UTILITIES
@@ -256,8 +262,7 @@ function scoreRing(score, color) {
 }
 
 // ─────────────────────────────────────────────
-// FLAG ANALYSIS
-// Liquidez < $5 = RUG (novo critério)
+// FLAG ANALYSIS  (liquidez < $5 = RUG)
 // ─────────────────────────────────────────────
 function analyzeFlags(liq, vol, buys, sells, fdv, mkt, pairCreatedAt) {
   var flags = [];
@@ -265,9 +270,8 @@ function analyzeFlags(liq, vol, buys, sells, fdv, mkt, pairCreatedAt) {
   var buyRatio = total > 0 ? (buys/total)*100 : 50;
   var age = ageDays(pairCreatedAt);
 
-  // CRITÉRIO ATUALIZADO: < $5 = rug pull
   if (liq < 5) {
-    flags.push({ level:'RUG', agent:'A liquidez deste pool é praticamente zero ($' + Number(liq).toFixed(2) + '). O cliente não conseguirá vender — liquidez possivelmente removida.', tech:'Liquidez menor que $5 (' + fmt(liq) + ').' });
+    flags.push({ level:'RUG', agent:'A liquidez deste pool é praticamente zero (' + fmt(liq) + '). O cliente não conseguirá vender — liquidez possivelmente removida.', tech:'Liquidez menor que $5.' });
   } else if (liq < 1000) {
     flags.push({ level:'HIGH', agent:'A liquidez disponível é insuficiente para realizar qualquer troca. A venda pode falhar ou resultar em grande perda de valor.', tech:'Liquidez crítica de ' + fmt(liq) + '.' });
   } else if (liq < 5000) {
@@ -299,19 +303,19 @@ function analyzeFlags(liq, vol, buys, sells, fdv, mkt, pairCreatedAt) {
 // ─────────────────────────────────────────────
 function getScenario(flags) {
   if (flags.some(function(f){ return f.level==='RUG'; }))
-    return { level:'RUG', label:'Rug Pull', color:'#E24B4A', glow:'#E24B4A33', score:100, action:'NÃO confirme a possibilidade de venda ao cliente.', actionDesc:'A liquidez deste pool foi removida ou é praticamente inexistente. O token existe na carteira mas não pode ser vendido. Informe com empatia que o valor não é recuperável neste pool.' };
+    return { level:'RUG', label:'Rug Pull', color:'#E24B4A', score:100, action:'NÃO confirme a possibilidade de venda ao cliente.', actionDesc:'A liquidez deste pool foi removida ou é praticamente inexistente. O token existe na carteira mas não pode ser vendido. Informe com empatia que o valor não é recuperável neste pool.' };
   if (flags.some(function(f){ return f.level==='HIGH'; }))
-    return { level:'HIGH', label:'Alto Risco', color:'#EF9F27', glow:'#EF9F2733', score:75, action:'Não garanta a venda. Oriente o cliente com cautela.', actionDesc:'Este pool apresenta múltiplos sinais de alerta. A venda pode não ser possível ou resultar em perda significativa.' };
+    return { level:'HIGH', label:'Alto Risco', color:'#EF9F27', score:75, action:'Não garanta a venda. Oriente o cliente com cautela.', actionDesc:'Este pool apresenta múltiplos sinais de alerta. A venda pode não ser possível ou resultar em perda significativa.' };
   if (flags.some(function(f){ return f.level==='MED'; }))
-    return { level:'MED', label:'Atenção', color:'#7F77DD', glow:'#7F77DD33', score:42, action:'Oriente o cliente sobre os riscos antes de prosseguir.', actionDesc:'Foram detectados sinais de atenção. A venda pode ser possível mas há riscos.' };
-  return { level:'OK', label:'Normal', color:'#1D9E75', glow:'#1D9E7533', score:12, action:'Nenhum sinal crítico detectado. Prossiga com a análise manual.', actionDesc:'Os dados automáticos não indicam fraude. Verifique as authorities para confirmar.' };
+    return { level:'MED', label:'Atenção', color:'#7F77DD', score:42, action:'Oriente o cliente sobre os riscos antes de prosseguir.', actionDesc:'Foram detectados sinais de atenção. A venda pode ser possível mas há riscos.' };
+  return { level:'OK', label:'Normal', color:'#1D9E75', score:12, action:'Nenhum sinal crítico detectado. Prossiga com a análise manual.', actionDesc:'Os dados automáticos não indicam fraude. Verifique as authorities para confirmar.' };
 }
 
 var FLAG_STYLE = {
   RUG: { color:'#E24B4A', bg:'#200808', border:'#5a1515', label:'Rug Pull' },
   HIGH: { color:'#EF9F27', bg:'#1f1208', border:'#5a3010', label:'Alto Risco' },
-  MED: { color:'#7F77DD', bg:'#10102a', border:'#303070', label:'Atenção' },
-  OK:  { color:'#1D9E75', bg:'#081a12', border:'#1a4530', label:'OK' },
+  MED:  { color:'#7F77DD', bg:'#10102a', border:'#303070', label:'Atenção' },
+  OK:   { color:'#1D9E75', bg:'#081a12', border:'#1a4530', label:'OK' },
 };
 function renderFlags(flags) {
   return flags.map(function(f) {
@@ -325,13 +329,10 @@ function renderFlags(flags) {
 }
 
 // ─────────────────────────────────────────────
-// CONSOLIDATED RISK (all pairs)
-// Score 100 apenas quando TODAS as pools são rug
-// Parcial → "Rug Pull em X Pools · Y ainda ativa(s)"
+// CONSOLIDATED RISK
 // ─────────────────────────────────────────────
 function getConsolidatedRisk(pairs) {
   var totalLiq = 0, rugCount = 0, highCount = 0, pairStatuses = [];
-
   pairs.forEach(function(p) {
     var liq = (p.liquidity && p.liquidity.usd) || 0;
     totalLiq += liq;
@@ -346,22 +347,19 @@ function getConsolidatedRisk(pairs) {
     pairStatuses.push({ dex: p.dexId||'—', pairAddr: p.pairAddress||'', liq: liq, level: sc.level, color: sc.color, label: sc.label });
   });
 
-  var total = pairs.length;
-  var activeCount = total - rugCount;
+  var total = pairs.length, activeCount = total - rugCount;
   var level, color, score, label, actionTitle, actionDesc;
 
   if (rugCount === total) {
-    // TODAS as pools zeradas → rug pull confirmado 100
     level = 'RUG'; color = '#E24B4A'; score = 100;
     label = 'Rug Pull Confirmado';
     actionTitle = 'NÃO confirme a possibilidade de venda ao cliente.';
     actionDesc = 'Todas as ' + total + ' pools tiveram liquidez removida. O token existe na carteira mas não pode ser vendido em nenhuma plataforma. Informe com empatia que o valor não é recuperável.';
   } else if (rugCount > 0) {
-    // Parcial: algumas zeradas, outras ainda ativas
     level = 'HIGH'; color = '#EF9F27'; score = 85;
     label = 'Rug Pull em ' + rugCount + ' Pool' + (rugCount > 1 ? 's' : '') + ' · ' + activeCount + ' ainda ativa' + (activeCount > 1 ? 's' : '');
     actionTitle = 'Atenção: parte da liquidez foi removida.';
-    actionDesc = rugCount + ' de ' + total + ' pools tiveram liquidez removida. ' + activeCount + ' pool' + (activeCount > 1 ? 's ainda estão ativas' : ' ainda está ativa') + ' — a venda pode ser possível nelas, mas com alto risco. Verifique cada pool individualmente nas abas abaixo.';
+    actionDesc = rugCount + ' de ' + total + ' pools com liquidez removida. ' + activeCount + ' pool' + (activeCount > 1 ? 's ainda estão ativas' : ' ainda está ativa') + ' — verifique cada pool nas abas abaixo.';
   } else if (highCount >= 1 || totalLiq < 1000) {
     level = 'HIGH'; color = '#EF9F27'; score = 70;
     label = 'Alto Risco';
@@ -373,21 +371,12 @@ function getConsolidatedRisk(pairs) {
     actionTitle = 'Nenhum sinal crítico detectado. Prossiga com a análise manual.';
     actionDesc = 'Os dados automáticos não indicam fraude. Verifique as authorities para confirmar.';
   }
-
   return { totalLiq, rugCount, highCount, totalPairs: total, activeCount, level, color, score, label, actionTitle, actionDesc, pairStatuses };
 }
 
 // ─────────────────────────────────────────────
-// AUTHORITIES — Solana RPC
-// Parse manual de bytes base64 (layout SPL Mint: 82 bytes)
-// Fallback entre múltiplos endpoints públicos
+// AUTHORITIES — via proxy Vercel → Solana RPC
 // ─────────────────────────────────────────────
-var RPC_ENDPOINTS = [
-  'https://api.mainnet-beta.solana.com',
-  'https://rpc.ankr.com/solana',
-  'https://solana-mainnet.g.alchemy.com/v2/demo'
-];
-
 var B58 = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
 function base58Encode(bytes) {
   var digits = [0];
@@ -408,38 +397,26 @@ function b64ToBytes(b64) {
 }
 
 // SPL Mint layout (82 bytes):
-// [0-3]   mintAuthorityOption  (u32 LE) — 1 = present
-// [4-35]  mintAuthority        (32 bytes pubkey)
-// [36-43] supply               (u64)
-// [44]    decimals             (u8)
-// [45]    isInitialized        (bool)
-// [46-49] freezeAuthorityOption (u32 LE) — 1 = present
-// [50-81] freezeAuthority      (32 bytes pubkey)
+// [0-3]   mintAuthorityOption  (u32 LE)
+// [4-35]  mintAuthority        (32 bytes)
+// [46-49] freezeAuthorityOption (u32 LE)
+// [50-81] freezeAuthority      (32 bytes)
 function parseMintBytes(bytes) {
   if (!bytes || bytes.length < 82) return null;
   var view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  var mintAuthOpt   = view.getUint32(0, true);
-  var freezeAuthOpt = view.getUint32(46, true);
   return {
-    mintAuthority:   mintAuthOpt   === 1 ? base58Encode(bytes.slice(4, 36))  : null,
-    freezeAuthority: freezeAuthOpt === 1 ? base58Encode(bytes.slice(50, 82)) : null
+    mintAuthority:   view.getUint32(0,  true) === 1 ? base58Encode(bytes.slice(4,  36)) : null,
+    freezeAuthority: view.getUint32(46, true) === 1 ? base58Encode(bytes.slice(50, 82)) : null
   };
 }
 
-// Try each RPC endpoint in sequence until one succeeds
-function rpcWithFallback(payload, endpointIdx, resolve, reject) {
-  if (endpointIdx >= RPC_ENDPOINTS.length) { reject(new Error('Todos os endpoints RPC falharam.')); return; }
-  fetch(RPC_ENDPOINTS[endpointIdx], {
+// All RPC calls go through our own Vercel proxy — no CORS issues
+function rpcCall(payload) {
+  return fetch(PROXY_BASE + '/api/rpc', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
-  })
-  .then(function(r) { return r.json(); })
-  .then(function(data) {
-    if (data && data.result !== undefined) { resolve(data); }
-    else { rpcWithFallback(payload, endpointIdx + 1, resolve, reject); }
-  })
-  .catch(function() { rpcWithFallback(payload, endpointIdx + 1, resolve, reject); });
+  }).then(function(r) { return r.json(); });
 }
 
 function fetchAuthorities(mintAddr, containerId) {
@@ -447,53 +424,41 @@ function fetchAuthorities(mintAddr, containerId) {
   if (!el) return;
   el.innerHTML = renderAuthLoading();
 
-  // Step 1: getAccountInfo with base64 encoding (more reliable than jsonParsed)
-  new Promise(function(resolve, reject) {
-    rpcWithFallback({
-      jsonrpc: '2.0', id: 1,
-      method: 'getAccountInfo',
-      params: [mintAddr, { encoding: 'base64' }]
-    }, 0, resolve, reject);
-  })
+  // Step 1 — mint account (base64)
+  rpcCall({ jsonrpc:'2.0', id:1, method:'getAccountInfo', params:[mintAddr, { encoding:'base64' }] })
   .then(function(data) {
     var value = data.result && data.result.value;
     if (!value || !value.data || !value.data[0]) {
       el.innerHTML = renderAuthError('Conta não encontrada na blockchain.');
       return;
     }
-    var bytes = b64ToBytes(value.data[0]);
-    var parsed = parseMintBytes(bytes);
-    if (!parsed) {
-      el.innerHTML = renderAuthError('Não foi possível interpretar os dados do mint account.');
-      return;
-    }
+    var parsed = parseMintBytes(b64ToBytes(value.data[0]));
+    if (!parsed) { el.innerHTML = renderAuthError('Não foi possível interpretar o mint account.'); return; }
 
-    // Step 2: fetch Update Authority via Metaplex getProgramAccounts
-    new Promise(function(resolve2) {
-      rpcWithFallback({
-        jsonrpc: '2.0', id: 2,
-        method: 'getProgramAccounts',
-        params: ['metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s', {
-          encoding: 'base64',
-          filters: [
-            { dataSize: 679 },
-            { memcmp: { offset: 33, bytes: mintAddr } }
-          ]
-        }]
-      }, 0, function(metaData) {
-        var accounts = metaData && metaData.result;
-        if (Array.isArray(accounts) && accounts.length > 0) {
-          try {
-            var metaBytes = b64ToBytes(accounts[0].account.data[0]);
-            // Update authority is at offset 1 (32 bytes) in metadata account
-            var updateAuth = base58Encode(metaBytes.slice(1, 33));
-            resolve2(updateAuth);
-          } catch(e) { resolve2(null); }
-        } else { resolve2(null); }
-      }, function() { resolve2(null); });
+    // Step 2 — Metaplex metadata for update authority
+    rpcCall({
+      jsonrpc:'2.0', id:2,
+      method:'getProgramAccounts',
+      params:['metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s', {
+        encoding:'base64',
+        filters:[{ dataSize:679 }, { memcmp:{ offset:33, bytes:mintAddr } }]
+      }]
     })
-    .then(function(updateAuth) {
+    .then(function(metaData) {
+      var updateAuth = null;
+      var accounts = metaData && metaData.result;
+      if (Array.isArray(accounts) && accounts.length > 0) {
+        try {
+          var metaBytes = b64ToBytes(accounts[0].account.data[0]);
+          // Update authority at offset 1 (32 bytes) in metadata account
+          updateAuth = base58Encode(metaBytes.slice(1, 33));
+        } catch(e) { updateAuth = null; }
+      }
       el.innerHTML = renderAuthCards(parsed.mintAuthority, parsed.freezeAuthority, updateAuth);
+    })
+    .catch(function() {
+      // Metadata call failed — still show mint/freeze results
+      el.innerHTML = renderAuthCards(parsed.mintAuthority, parsed.freezeAuthority, null);
     });
   })
   .catch(function(e) {
@@ -505,7 +470,7 @@ function renderAuthLoading() {
   return '<div class="grid3">'
     + ['Mint Authority','Freeze Authority','Update Authority'].map(function(lbl) {
         return '<div class="auth-card"><div class="auth-label">' + lbl + '</div>'
-          + '<div class="auth-loading"><div class="auth-spinner"></div><span>Consultando RPC...</span></div></div>';
+          + '<div class="auth-loading"><div class="auth-spinner"></div><span>Consultando via proxy...</span></div></div>';
       }).join('')
     + '</div>';
 }
@@ -518,8 +483,7 @@ function renderAuthError(msg) {
     + '</div>';
 }
 
-// Addresses considered "null" / safe
-var SAFE_ADDRS = ['11111111111111111111111111111111', 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'];
+var SAFE_ADDRS = ['11111111111111111111111111111111','TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'];
 function isSafe(val) { return !val || SAFE_ADDRS.indexOf(val) >= 0; }
 
 function renderAuthCards(mintAuth, freezeAuth, updateAuth) {
@@ -530,21 +494,16 @@ function renderAuthCards(mintAuth, freezeAuth, updateAuth) {
     var badgeText = safe ? 'Desabilitado ✓' : 'ATIVO ⚠';
     return '<div class="auth-card">'
       + '<div class="auth-label">' + label + '</div>'
-      + '<div class="auth-row">'
-      + '<div class="auth-dot" style="background:' + color + '"></div>'
-      + '<span class="auth-badge" style="color:' + color + ';background:' + badgeBg + ';border:0.5px solid ' + color + '44">' + badgeText + '</span>'
-      + '</div>'
+      + '<div class="auth-row"><div class="auth-dot" style="background:' + color + '"></div>'
+      + '<span class="auth-badge" style="color:' + color + ';background:' + badgeBg + ';border:0.5px solid ' + color + '44">' + badgeText + '</span></div>'
       + (!safe ? '<div class="auth-val">' + value + '</div>' : '')
       + '<div class="auth-hint">' + hint + '</div>'
       + '</div>';
   }
   return '<div class="grid3">'
-    + card('Mint Authority', mintAuth,
-        isSafe(mintAuth) ? 'Sem risco: o criador não pode gerar novos tokens.' : '⚠ Ativo — o criador pode cunhar tokens ilimitados a qualquer momento.')
-    + card('Freeze Authority', freezeAuth,
-        isSafe(freezeAuth) ? 'Sem risco: ninguém pode bloquear a carteira do cliente.' : '⚠ Ativo — o criador pode congelar a carteira do cliente e impedir vendas.')
-    + card('Update Authority', updateAuth,
-        isSafe(updateAuth) ? 'Sem risco: metadados do token não podem ser alterados.' : '⚠ Ativo — o criador pode alterar nome, símbolo e metadados do token.')
+    + card('Mint Authority',   mintAuth,   isSafe(mintAuth)   ? 'Sem risco: o criador não pode gerar novos tokens.'                          : '⚠ Ativo — o criador pode cunhar tokens ilimitados a qualquer momento.')
+    + card('Freeze Authority', freezeAuth, isSafe(freezeAuth) ? 'Sem risco: ninguém pode bloquear a carteira do cliente.'                    : '⚠ Ativo — o criador pode congelar a carteira do cliente e impedir vendas.')
+    + card('Update Authority', updateAuth, isSafe(updateAuth) ? 'Sem risco: metadados do token não podem ser alterados.'                     : '⚠ Ativo — o criador pode alterar nome, símbolo e metadados do token.')
     + '</div>';
 }
 
@@ -581,7 +540,7 @@ function renderConsolidatedBar(risk) {
   var rugLabel = risk.rugCount === 0
     ? 'Nenhuma pool com liquidez removida detectada automaticamente'
     : risk.rugCount === risk.totalPairs
-      ? 'Todas as ' + risk.totalPairs + ' pools tiveram liquidez removida — Rug Pull confirmado'
+      ? 'Todas as ' + risk.totalPairs + ' pools com liquidez removida — Rug Pull confirmado'
       : risk.rugCount + ' de ' + risk.totalPairs + ' pools com liquidez removida · ' + risk.activeCount + ' ainda ativa' + (risk.activeCount > 1 ? 's' : '');
 
   var poolRows = risk.pairStatuses.map(function(ps, i) {
@@ -600,10 +559,7 @@ function renderConsolidatedBar(risk) {
     + '<div class="consolidated-stat"><div class="consolidated-stat-label">Risk Score</div><div class="consolidated-stat-value" style="color:' + color + '">' + risk.score + '/100</div></div>'
     + '<div class="consolidated-stat"><div class="consolidated-stat-label">Diagnóstico</div><div class="consolidated-stat-value" style="color:' + color + '">' + risk.label + '</div></div>'
     + '</div>'
-    + '<div class="pool-status-list">'
-    + '<div style="font-size:11px;margin:6px 0 4px;color:' + color + '">' + rugLabel + '</div>'
-    + poolRows
-    + '</div>'
+    + '<div class="pool-status-list"><div style="font-size:11px;margin:6px 0 4px;color:' + color + '">' + rugLabel + '</div>' + poolRows + '</div>'
     + '</div>';
 }
 
@@ -629,15 +585,11 @@ function renderPairTabs(pairs, risk, tokenAddr) {
     var sc = getScenario(flags);
     tabs += '<div class="pair-tab ' + tabClass(sc.level) + (i===0?' active':'') + '" onclick="switchTab(' + i + ')" id="tab-btn-' + i + '">'
       + '<div class="pair-tab-dot" style="background:' + sc.color + '"></div>'
-      + 'Pool ' + (i+1) + ' · ' + (p.dexId||'—')
-      + '</div>';
+      + 'Pool ' + (i+1) + ' · ' + (p.dexId||'—') + '</div>';
     contents += '<div class="pair-tab-content' + (i===0?' active':'') + '" id="tab-content-' + i + '">'
-      + renderPairContent(p, flags, sc, tokenAddr, i)
-      + '</div>';
+      + renderPairContent(p, flags, sc, tokenAddr, i) + '</div>';
   });
-  return '<div class="pair-tabs-wrap">'
-    + '<div class="pair-tabs-header">' + tabs + '</div>'
-    + contents + '</div>';
+  return '<div class="pair-tabs-wrap"><div class="pair-tabs-header">' + tabs + '</div>' + contents + '</div>';
 }
 
 function switchTab(idx) {
@@ -650,25 +602,26 @@ function switchTab(idx) {
 }
 
 function renderPairContent(p, flags, sc, tokenAddr, idx) {
-  var liq = (p.liquidity && p.liquidity.usd) || 0;
-  var vol = (p.volume && p.volume.h24) || 0;
-  var buys = (p.txns && p.txns.h24 && p.txns.h24.buys) || 0;
-  var sells = (p.txns && p.txns.h24 && p.txns.h24.sells) || 0;
-  var fdv = p.fdv || 0, mkt = p.marketCap || 0;
-  var liqQ = (p.liquidity && p.liquidity.quote) || 0;
-  var liqB = (p.liquidity && p.liquidity.base) || 0;
-  var sym = (p.baseToken && p.baseToken.symbol) || '—';
-  var name = (p.baseToken && p.baseToken.name) || '—';
-  var pc = p.priceChange || {};
-  var total = buys + sells, buyPct = total > 0 ? Math.round((buys/total)*100) : 0;
-  var age = ageDays(p.pairCreatedAt);
-  var ageAlert = age < 1 ? 'alert-red' : age < 7 ? 'alert-yellow' : '';
-  var liqColor = liq < 5 ? '#E24B4A' : liq < 5000 ? '#EF9F27' : '#1D9E75';
-  var liqBarW = Math.min(100, (liq/100000)*100);
-  var time = analysisTime ? analysisTime.toLocaleString('pt-BR') : '';
-  var authId = 'auth-container-' + idx;
-  var pairAddr = p.pairAddress || '';
-  var isRug = sc.level === 'RUG';
+  var liq    = (p.liquidity && p.liquidity.usd)   || 0;
+  var vol    = (p.volume && p.volume.h24)          || 0;
+  var buys   = (p.txns && p.txns.h24 && p.txns.h24.buys)  || 0;
+  var sells  = (p.txns && p.txns.h24 && p.txns.h24.sells) || 0;
+  var fdv    = p.fdv || 0, mkt = p.marketCap || 0;
+  var liqQ   = (p.liquidity && p.liquidity.quote) || 0;
+  var liqB   = (p.liquidity && p.liquidity.base)  || 0;
+  var sym    = (p.baseToken && p.baseToken.symbol) || '—';
+  var name   = (p.baseToken && p.baseToken.name)   || '—';
+  var pc     = p.priceChange || {};
+  var total  = buys + sells, buyPct = total > 0 ? Math.round((buys/total)*100) : 0;
+  var age    = ageDays(p.pairCreatedAt);
+  var ageAlert  = age < 1 ? 'alert-red' : age < 7 ? 'alert-yellow' : '';
+  var liqColor  = liq < 5 ? '#E24B4A' : liq < 5000 ? '#EF9F27' : '#1D9E75';
+  var liqBarW   = Math.min(100, (liq/100000)*100);
+  var time      = analysisTime ? analysisTime.toLocaleString('pt-BR') : '';
+  var authId    = 'auth-container-' + idx;
+  var pairAddr  = p.pairAddress || '';
+  var isRug     = sc.level === 'RUG';
+  var solscanPoolUrl = 'https://solscan.io/account/' + pairAddr + '#defiactivities';
 
   var html = '';
 
@@ -712,21 +665,25 @@ function renderPairContent(p, flags, sc, tokenAddr, idx) {
     + '<div style="margin-top:12px"><div class="card-title">Supply fora de circulação</div>'
     + renderSupply(fdv, mkt) + '</div></div>';
 
-  // Liquidity + Solscan Remove Liquidity hint
-  html += '<div class="card"><div class="card-title">Liquidez (Pool ' + (idx+1) + ')</div><div class="grid3">'
+  // Liquidity card
+  html += '<div class="card"><div class="card-title">Liquidez (Pool ' + (idx+1) + ')</div>'
+    + '<div class="grid3">'
     + '<div class="stat' + (isRug ? ' alert-red' : '') + '"><div class="stat-label">Total (USD)</div><div class="liq-big" style="color:' + liqColor + '">' + fmt(liq) + '</div><div class="bar-wrap"><div class="bar-fill" style="width:' + liqBarW + '%;background:' + liqColor + '"></div></div></div>'
     + '<div class="stat"><div class="stat-label">Pooled SOL</div><div class="stat-value">' + Number(liqQ).toFixed(4) + ' SOL</div></div>'
     + '<div class="stat"><div class="stat-label">Pooled ' + sym + '</div><div class="stat-value">' + Number(liqB).toLocaleString() + '</div></div>'
-    + '</div>';
+    + '</div>'
+    // Disclaimer: dado vem do DexScreener, pode ter delay
+    + '<div class="liq-disclaimer">⚠ Valor de liquidez fornecido pelo DexScreener — pode ter delay. Para o valor atual, <a href="https://solscan.io/account/' + pairAddr + '" target="_blank">verifique o pool no Solscan ↗</a></div>';
 
-  // Rug confirm hint com link Solscan filtrado
+  // Rug confirm hint — instruções para verificar Remove Liquidity
   if (isRug && pairAddr) {
-    var solscanPoolUrl = 'https://solscan.io/account/' + pairAddr + '#defiactivities';
     html += '<div class="rug-confirm-hint">'
-      + '⚠ Devido à liquidez extremamente baixa neste pool, é provável que a liquidez tenha sido removida (rug pull). '
-      + 'Para confirmar, verifique o histórico de transações deste pool e procure por ações do tipo <strong style="color:#E24B4A">REMOVE LIQUIDITY</strong>. '
-      + '<a class="rug-confirm-link" href="' + solscanPoolUrl + '" target="_blank">Clique aqui para consultar as transações deste pool no Solscan ↗</a>'
-      + '</div>';
+      + '<strong>Liquidez extremamente baixa — possível rug pull.</strong> Para confirmar se a liquidez foi removida, siga os passos:<ol>'
+      + '<li><a class="rug-confirm-link" href="' + solscanPoolUrl + '" target="_blank">Clique aqui para abrir as transações deste pool no Solscan ↗</a></li>'
+      + '<li>Na página que abrir, clique em <strong>Action</strong> e selecione apenas <strong>Remove Liquidity</strong></li>'
+      + '<li>Se <strong>não houver transação</strong> → liquidez ainda presente (baixa, mas não removida)</li>'
+      + '<li>Se <strong>houver transação</strong> → liquidez removida, rug pull confirmado</li>'
+      + '</ol></div>';
   }
   html += '</div>';
 
@@ -744,9 +701,9 @@ function renderPairContent(p, flags, sc, tokenAddr, idx) {
     + '<div class="card" style="margin-bottom:0"><div class="card-title">Preço e Variação</div>'
     + '<div style="font-size:18px;font-weight:500;color:#e0e0e0;margin-bottom:10px">$' + (p.priceUsd||'0') + '</div>'
     + '<div class="grid2">'
-    + statCard('5m', pct(pc.m5), pctColor(pc.m5))
-    + statCard('1h', pct(pc.h1), pctColor(pc.h1))
-    + statCard('6h', pct(pc.h6), pctColor(pc.h6))
+    + statCard('5m',  pct(pc.m5),  pctColor(pc.m5))
+    + statCard('1h',  pct(pc.h1),  pctColor(pc.h1))
+    + statCard('6h',  pct(pc.h6),  pctColor(pc.h6))
     + statCard('24h', pct(pc.h24), pctColor(pc.h24))
     + '</div></div></div>';
 
@@ -757,7 +714,9 @@ function renderPairContent(p, flags, sc, tokenAddr, idx) {
     + statCard('Par criado', timeAgo(p.pairCreatedAt), age<1?'#E24B4A':age<7?'#EF9F27':'#e0e0e0', ageAlert)
     + statCard('DEX', p.dexId||'—')
     + '</div>'
-    + (fdv > 0 && mkt > 0 && Math.abs(fdv-mkt)/fdv < 0.01 ? '<div style="margin-top:8px;font-size:11px;color:#7F77DD;background:#10102a;border:0.5px solid #303070;border-radius:6px;padding:6px 10px">FDV = Market Cap — 100% do supply em circulação desde o lançamento</div>' : '')
+    + (fdv > 0 && mkt > 0 && Math.abs(fdv-mkt)/fdv < 0.01
+        ? '<div style="margin-top:8px;font-size:11px;color:#7F77DD;background:#10102a;border:0.5px solid #303070;border-radius:6px;padding:6px 10px">FDV = Market Cap — 100% do supply em circulação desde o lançamento</div>'
+        : '')
     + '</div>';
 
   // Pool address
@@ -769,7 +728,9 @@ function renderPairContent(p, flags, sc, tokenAddr, idx) {
     + '</div>'
     + '<div class="links">'
     + '<a class="ext-link" href="https://solscan.io/account/' + pairAddr + '" target="_blank">Ver pool no Solscan ↗</a>'
-    + (isRug && pairAddr ? '<a class="ext-link" href="https://solscan.io/account/' + pairAddr + '#defiactivities" target="_blank" style="border-color:#E24B4A44;color:#E24B4A">Ver transações · Remove Liquidity ↗</a>' : '')
+    + (isRug && pairAddr
+        ? '<a class="ext-link" href="' + solscanPoolUrl + '" target="_blank" style="border-color:#E24B4A44;color:#E24B4A">Ver transações · Remove Liquidity ↗</a>'
+        : '')
     + '</div></div>';
 
   return html;
@@ -781,20 +742,20 @@ function renderPairContent(p, flags, sc, tokenAddr, idx) {
 function copyResume(idx) {
   var p = allPairsData[idx];
   if (!p) return;
-  var liq = (p.liquidity && p.liquidity.usd) || 0;
-  var vol = (p.volume && p.volume.h24) || 0;
-  var mkt = p.marketCap || 0, fdv = p.fdv || 0;
-  var sym = (p.baseToken && p.baseToken.symbol) || '—';
-  var name = (p.baseToken && p.baseToken.name) || '—';
-  var addr = (p.baseToken && p.baseToken.address) || currentAddress;
-  var buys = (p.txns && p.txns.h24 && p.txns.h24.buys) || 0;
+  var liq   = (p.liquidity && p.liquidity.usd) || 0;
+  var vol   = (p.volume && p.volume.h24)        || 0;
+  var mkt   = p.marketCap || 0, fdv = p.fdv || 0;
+  var sym   = (p.baseToken && p.baseToken.symbol) || '—';
+  var name  = (p.baseToken && p.baseToken.name)   || '—';
+  var addr  = (p.baseToken && p.baseToken.address) || currentAddress;
+  var buys  = (p.txns && p.txns.h24 && p.txns.h24.buys)  || 0;
   var sells = (p.txns && p.txns.h24 && p.txns.h24.sells) || 0;
   var flags = analyzeFlags(liq, vol, buys, sells, fdv, mkt, p.pairCreatedAt);
-  var sc = getScenario(flags);
-  var risk = getConsolidatedRisk(allPairsData);
+  var sc    = getScenario(flags);
+  var risk  = getConsolidatedRisk(allPairsData);
   var flagText = flags.map(function(f){ return '• [' + f.level + '] ' + f.agent; }).join('\n');
   var text = [
-    '=== Rug Pull Detector v5.1 ===',
+    '=== Rug Pull Detector v5.2 ===',
     'Analisado em: ' + (analysisTime ? analysisTime.toLocaleString('pt-BR') : ''),
     'Token: ' + name + ' (' + sym + ')',
     'Contract: ' + addr,
@@ -802,14 +763,14 @@ function copyResume(idx) {
     '-- VISÃO CONSOLIDADA --',
     'Total de pools: ' + risk.totalPairs,
     'Pools com rug pull: ' + risk.rugCount,
-    'Liquidez total: ' + fmt(risk.totalLiq),
+    'Liquidez total (DexScreener): ' + fmt(risk.totalLiq),
     'Risk Score Consolidado: ' + risk.score + '/100',
     'Diagnóstico Consolidado: ' + risk.label,
     '',
     '-- POOL ' + (idx+1) + ' · ' + (p.dexId||'—') + ' --',
     'Risk Score: ' + sc.score + '/100',
     'Diagnóstico: ' + sc.label,
-    'Liquidez: ' + fmt(liq),
+    'Liquidez (DexScreener): ' + fmt(liq),
     'Volume 24h: ' + fmt(vol),
     'Market Cap: ' + fmt(mkt),
     'FDV: ' + fmt(fdv),
@@ -840,8 +801,8 @@ function renderNotFound(addr) {
     + '<div class="steps-box"><div class="steps-title">O que fazer agora</div>'
     + '<div class="step"><div class="step-num">1</div><div><div class="step-title">Confirme o endereço com o cliente</div><div class="step-desc">Um endereço Solana válido tem entre 32 e 44 caracteres alfanuméricos.</div></div></div>'
     + '<div class="step"><div class="step-num">2</div><div><div class="step-title">Verifique na OKX Web3</div><div class="step-desc">O token pode existir na blockchain mas sem pares ativos.</div></div></div>'
-    + '<div class="step"><div class="step-num">3</div><div><div class="step-title">Verifique no Solscan</div><div class="step-desc">Procure por transações de tipo REMOVE LIQUIDITY nas atividades do token para confirmar se a liquidez foi removida.</div></div></div>'
-    + '<div class="step"><div class="step-num">4</div><div><div class="step-title">Oriente o cliente</div><div class="step-desc">Se confirmado que não há liquidez disponível em nenhuma plataforma, informe ao cliente que a venda não é possível no momento. Isso não é uma limitação da OKX — é o estado atual do token na blockchain.</div></div></div>'
+    + '<div class="step"><div class="step-num">3</div><div><div class="step-title">Verifique no Solscan</div><div class="step-desc">Na página do token, vá em DeFi Activities, clique em Action e selecione Remove Liquidity. Se houver transação, a liquidez foi removida.</div></div></div>'
+    + '<div class="step"><div class="step-num">4</div><div><div class="step-title">Oriente o cliente</div><div class="step-desc">Se confirmado que não há liquidez disponível, informe ao cliente que a venda não é possível no momento. Isso não é uma limitação da OKX — é o estado atual do token na blockchain.</div></div></div>'
     + '</div>'
     + '<div class="not-found-links">'
     + '<a class="nf-btn" href="https://web3.okx.com/pt-BR/token/solana/' + addr + '" target="_blank" style="border-color:#EF9F27;color:#EF9F27;background:#EF9F2711">Verificar na OKX Web3 ↗</a>'
@@ -862,27 +823,21 @@ function renderAllPairs(pairs, addr) {
   var risk = getConsolidatedRisk(pairs);
   var html = '';
 
-  // Consolidated bar
   html += renderConsolidatedBar(risk);
-
-  // Global action box
   html += '<div class="action-box" style="background:' + risk.color + '11;border-color:' + risk.color + '">'
     + '<div class="action-label" style="color:' + risk.color + '">DIAGNÓSTICO CONSOLIDADO · ' + risk.totalPairs + ' POOL' + (risk.totalPairs > 1 ? 'S' : '') + '</div>'
     + '<div class="action-title" style="color:' + risk.color + '">' + risk.actionTitle + '</div>'
     + '<div class="action-desc" style="color:' + risk.color + 'cc">' + risk.actionDesc + '</div>'
     + '</div>';
-
-  // Pair tabs
   html += renderPairTabs(pairs, risk, tokenAddr);
 
   document.getElementById('result').innerHTML = html;
 
-  // Fetch authorities once (same mint for all pools)
   pairs.forEach(function(p, i) {
     fetchAuthorities(tokenAddr, 'auth-container-' + i);
   });
 
-  currentToken = { name, symbol: sym, address: tokenAddr, risk };
+  currentToken = { name: name, symbol: sym, address: tokenAddr, risk: risk };
 }
 
 // ─────────────────────────────────────────────
@@ -891,7 +846,6 @@ function renderAllPairs(pairs, addr) {
 function reanalyze() {
   if (currentAddress) { document.getElementById('addressInput').value = currentAddress; analyze(); }
 }
-
 function analyze() {
   var q = document.getElementById('addressInput').value.trim();
   var errEl = document.getElementById('inputError');
@@ -911,7 +865,7 @@ function analyze() {
   currentToken = null; allPairsData = [];
   document.getElementById('result').innerHTML = '<div class="loading"><div class="spinner"></div>Buscando dados na blockchain...</div>';
 
-  fetch('https://okx-rugpull-proxy.vercel.app/api/proxy?address=' + q)
+  fetch(PROXY_BASE + '/api/proxy?address=' + q)
     .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
     .then(function(data) {
       var pairs = Array.isArray(data) ? data : [];
