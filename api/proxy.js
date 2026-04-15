@@ -1,6 +1,11 @@
 export default async function handler (req, res) {
   res.setHeader("Access-control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET");
+  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+  res.setHeader("Access-control-allow-headers", "Content-type");
+
+  if (req.method === "options") {
+    return res.status(200).end();
+  }
 
 const { address } = req.query;
 
