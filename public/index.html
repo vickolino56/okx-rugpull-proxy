@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OKX Rug Pull Detector</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #080c12; color: #e0e0e0; min-height: 100vh; padding-bottom: 40px; }
+  a { color: inherit; text-decoration: none; }
+
+  .header { background: #0a0e16; border-bottom: 0.5px solid #1a2030; padding: 12px 24px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
+  .header-logo { width: 30px; height: 30px; background: linear-gradient(135deg, #1D9E75, #378ADD); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: #fff; flex-shrink: 0; }
+  .header-title { font-size: 14px; font-weight: 500; color: #fff; }
+  .header-sub { font-size: 10px; color: #444; }
+  .header-left { display: flex; align-items: center; gap: 10px; }
+
+  .container { max-width: 780px; margin: 0 auto; padding: 0 20px; }
+  .card { background: #0d1117; border: 0.5px solid #1e2530; border-radius: 12px; padding: 14px 16px; margin-bottom: 12px; }
+  .card-title { font-size: 10px; color: #555; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px; }
+
+  .search-wrap { display: flex; gap: 10px; align-items: center; }
+  .search-input { flex: 1; font-size: 13px; padding: 10px 14px; border-radius: 8px; border: 0.5px solid #1e2530; outline: none; color: #e0e0e0; background: #060a10; font-family: inherit; }
+  .search-btn { padding: 10px 22px; border-radius: 8px; background: #1D9E75; color: #fff; font-size: 13px; font-weight: 500; border: none; cursor: pointer; white-space: nowrap; }
+  .search-btn:disabled { background: #1a2030; cursor: not-allowed; }
+
+  .idle-msg { text-align: center; padding: 48px 0; color: #333; font-size: 13px; }
+  .loading { text-align: center; padding: 48px 0; color: #444; font-size: 13px; }
+  .spinner { width: 28px; height: 28px; border: 2px solid #1e2530; border-top: 2px solid #1D9E75; border-radius: 50%; margin: 0 auto 14px; animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .error-box { background: #1a0808; border: 0.5px solid rgba(226,75,74,0.2); border-radius: 12px; padding: 24px; text-align: center; margin-bottom: 12px; }
+  .error-title { font-size: 14px; font-weight: 500; color: #E24B4A; margin-bottom: 6px; }
+  .error-msg { font-size: 12px; color: #884444; line-height: 1.6; }
+
+  .diag-box { background: #0a0e16; border-radius: 14px; padding: 18px 20px; margin-bottom: 12px; }
+  .diag-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 14px; gap: 12px; }
+  .diag-label { font-size: 10px; color: #555; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 4px; }
+  .diag-title { font-size: 20px; font-weight: 500; margin-bottom: 4px; }
+  .diag-sub { font-size: 12px; color: #888; }
+  .flags { display: flex; flex-direction: column; gap: 5px; }
+  .flag-item { display: flex; gap: 8px; align-items: flex-start; border-radius: 7px; padding: 7px 10px; }
+  .flag-badge { font-size: 9px; font-weight: 500; padding: 2px 5px; border-radius: 3px; flex-shrink: 0; margin-top: 1px; white-space: nowrap; }
+  .flag-text { font-size: 12px; color: #bbb; line-height: 1.5; }
+
+  .copy-btn { font-size: 11px; padding: 6px 14px; border-radius: 6px; border: 0.5px solid #1e2530; background: #060a10; color: #666; cursor: pointer; margin-top: 14px; display: block; margin-left: auto; }
+  .copy-btn.copied { border-color: #1D9E75; color: #1D9E75; background: #081a12; }
+
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+  .grid4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 8px; }
+
+  .stat { background: #060a10; border: 0.5px solid #1e2530; border-radius: 8px; padding: 10px 12px; }
+  .stat-label { font-size: 10px; color: #555; margin-bottom: 3px; }
+  .stat-value { font-size: 14px; font-weight: 500; color: #e0e0e0; }
+
+  .auth-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+  .auth-val { font-size: 12px; font-family: monospace; word-break: break-all; }
+
+  .bar-wrap { height: 4px; border-radius: 2px; background: #1e2530; overflow: hidden; margin-top: 6px; }
+  .bar-fill { height: 100%; border-radius: 2px; }
+
+  .buysell-wrap { margin-top: 10px; }
+  .buysell-labels { display: flex; justify-content: space-between; font-size: 10px; color: #555; margin-bottom: 3px; }
+  .buysell-bar { height: 4px; border-radius: 2px; background: #3a1a1a; overflow: hidden; }
+  .buysell-fill { height: 100%; background: #1D9E75; border-radius: 2px; }
+
+  .links { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+  .ext-link { font-size: 11px; padding: 4px 10px; border-radius: 6px; border: 0.5px solid #1e2530; color: #666; background: #060a10; }
+  .ext-link:hover { color: #999; }
+
+  .score-ring { display: flex; flex-direction: column; align-items: center; gap: 4px; flex-shrink: 0; }
+  .score-label-small { font-size: 10px; color: #555; text-transform: uppercase; letter-spacing: 0.5px; }
+
+  .supply-inner { background: #060a10; border: 0.5px solid #1e2530; border-radius: 8px; padding: 12px 14px; }
+  .supply-row { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
+  .supply-text { font-size: 12px; font-weight: 500; margin-bottom: 2px; }
+  .supply-sub { font-size: 11px; color: #555; }
+  .supply-pct { font-size: 18px; font-weight: 500; flex-shrink: 0; margin-left: 12px; }
+  .supply-foot { display: flex; justify-content: space-between; font-size: 10px; color: #444; margin-top: 4px; }
+
+  .footer { text-align: center; font-size: 10px; color: #1e2530; margin-top: 8px; }
+
+  .liq-big { font-size: 20px; font-weight: 500; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <div class="header-logo">R</div>
+    <div>
+      <div class="header-title">Rug Pull Detector <span style="font-size:10px;color:#444;font-weight:400">v2.0</span></div>
+      <div class="header-sub">OKX Internal Tool · Solana</div>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+  <div class="card">
+    <div class="search-wrap">
+      <input class="search-input" id="addressInput" placeholder="Cole o contract address do token Solana..." />
+      <button class="search-btn" id="analyzeBtn" onclick="analyze()">Analisar →</button>
+    </div>
+  </div>
+
+  <div id="result"></div>
+
+  <div class="footer">OKX Internal Tool · Feito por Vinicius Fernandes · Solana</div>
+</div>
+
+<script>
+var currentToken = null;
+var analysisTime = null;
+
+function fmt(n) {
+  if (n == null || isNaN(n)) return '—';
+  if (n >= 1e6) return '$' + (n/1e6).toFixed(2) + 'M';
+  if (n >= 1e3) return '$' + (n/1e3).toFixed(2) + 'K';
+  return '$' + Number(n).toFixed(2);
+}
+
+function pct(n) {
+  if (n == null) return '—';
+  var v = Number(n).toFixed(2);
+  return (v > 0 ? '+' : '') + v + '%';
+}
+
+function pctColor(v) {
+  if (v == null) return '#666';
+  return Number(v) >= 0 ? '#1D9E75' : '#E24B4A';
+}
+
+function timeAgo(ts) {
+  if (!ts) return '—';
+  var diff = Date.now() - ts;
+  var d = Math.floor(diff/86400000);
+  var h = Math.floor(diff/3600000);
+  var m = Math.floor(diff/60000);
+  if (d > 0) return d + (d>1?' dias':' dia') + ' atrás';
+  if (h > 0) return h + (h>1?' horas':' hora') + ' atrás';
+  return m + ' min atrás';
+}
+
+function scoreRing(score, color) {
+  var r = 28, circ = 2 * Math.PI * r;
+  var dash = circ * (1 - score/100);
+  return '<svg width="72" height="72" style="transform:rotate(-90deg)">'
+    + '<circle cx="36" cy="36" r="' + r + '" fill="none" stroke="#1e2530" stroke-width="5"/>'
+    + '<circle cx="36" cy="36" r="' + r + '" fill="none" stroke="' + color + '" stroke-width="5" stroke-dasharray="' + circ + '" stroke-dashoffset="' + dash + '" stroke-linecap="round"/>'
+    + '<text x="36" y="36" text-anchor="middle" dominant-baseline="central" style="transform:rotate(90deg);transform-origin:36px 36px;font-size:16px;font-weight:600;fill:' + color + '">' + score + '</text>'
+    + '</svg>';
+}
+
+function analyzeFlags(liq, vol, buys, sells, fdv, mkt, pairCreatedAt) {
+  var flags = [];
+  var total = buys + sells;
+  var buyRatio = total > 0 ? (buys/total)*100 : 50;
+  var age = pairCreatedAt ? Date.now() - pairCreatedAt : null;
+
+  if (liq < 1) flags.push({ level:'RUG', text:'Liquidez menor que $1 — pool praticamente vazia, token provavelmente invendável.' });
+  else if (liq < 1000) flags.push({ level:'HIGH', text:'Liquidez crítica de ' + fmt(liq) + ' — insuficiente para a maioria das trocas.' });
+  else if (liq < 5000) flags.push({ level:'MED', text:'Liquidez baixa de ' + fmt(liq) + ' — risco elevado de slippage em vendas.' });
+
+  if (liq > 0 && vol > liq * 10) flags.push({ level:'HIGH', text:'Volume 24h (' + fmt(vol) + ') é ' + Math.round(vol/liq) + 'x maior que a liquidez — possível wash trading.' });
+  if (buyRatio > 90) flags.push({ level:'MED', text:Math.round(buyRatio) + '% das transações são compras — possível pump artificial.' });
+  if (age !== null && age < 86400000) flags.push({ level:'MED', text:'Par criado há ' + timeAgo(pairCreatedAt) + ' — token muito novo, sem histórico suficiente.' });
+  if (fdv > 0 && mkt > 0 && Math.abs(fdv-mkt)/fdv < 0.01) flags.push({ level:'MED', text:'FDV igual ao Market Cap — 100% do supply já está em circulação desde o lançamento.' });
+  if (flags.length === 0) flags.push({ level:'OK', text:'Nenhuma flag crítica detectada. Análise manual recomendada para confirmação.' });
+
+  return flags;
+}
+
+function getScenario(flags, liq) {
+  if (flags.some(function(f){ return f.level==='RUG'; })) return { label:'Rug Pull Confirmado', color:'#E24B4A', glow:'#E24B4A33', score:97 };
+  if (flags.some(function(f){ return f.level==='HIGH'; })) return { label:'Alto Risco', color:'#EF9F27', glow:'#EF9F2733', score:75 };
+  if (flags.some(function(f){ return f.level==='MED'; })) return { label:'Atenção', color:'#7F77DD', glow:'#7F77DD33', score:42 };
+  return { label:'Aparentemente Normal', color:'#1D9E75', glow:'#1D9E7533', score:12 };
+}
+
+var FLAG_STYLE = {
+  RUG: { color:'#E24B4A', bg:'#200808', border:'#5a1515', label:'Rug Pull' },
+  HIGH: { color:'#EF9F27', bg:'#1f1208', border:'#5a3010', label:'Alto Risco' },
+  MED: { color:'#7F77DD', bg:'#10102a', border:'#303070', label:'Atenção' },
+  OK: { color:'#1D9E75', bg:'#081a12', border:'#1a4530', label:'OK' },
+};
+
+function renderFlags(flags) {
+  return flags.map(function(f) {
+    var fs = FLAG_STYLE[f.level];
+    return '<div class="flag-item" style="background:' + fs.bg + ';border:0.5px solid ' + fs.border + '">'
+      + '<span class="flag-badge" style="color:' + fs.color + ';border:0.5px solid ' + fs.border + ';background:' + fs.bg + '">' + fs.label + '</span>'
+      + '<span class="flag-text">' + f.text + '</span>'
+      + '</div>';
+  }).join('');
+}
+
+function renderSupply(fdv, mkt) {
+  var diff = fdv - mkt;
+  var pctOut = fdv > 0 ? (diff/fdv)*100 : 0;
+  var isEqual = Math.abs(pctOut) < 1;
+  var color = isEqual ? '#1D9E75' : pctOut < 20 ? '#1D9E75' : pctOut < 50 ? '#EF9F27' : '#E24B4A';
+  var label = isEqual
+    ? '100% do supply em circulação — nenhum token bloqueado'
+    : pctOut < 20 ? Math.round(pctOut) + '% do supply fora de circulação — diferença pequena, risco baixo'
+    : pctOut < 50 ? Math.round(pctOut) + '% do supply fora de circulação — quantidade relevante, monitorar'
+    : Math.round(pctOut) + '% do supply ainda não circula — risco alto de pressão vendedora futura';
+  var barW = Math.min(100, Math.max(0, 100-pctOut));
+
+  return '<div class="supply-inner">'
+    + '<div class="supply-row">'
+    + '<div><div class="supply-text" style="color:' + color + '">' + label + '</div>'
+    + (!isEqual ? '<div class="supply-sub">Valor estimado fora de circulação: ' + fmt(diff > 0 ? diff : 0) + '</div>' : '')
+    + '</div>'
+    + '<div class="supply-pct" style="color:' + color + '">' + (isEqual ? '0%' : Math.round(pctOut) + '%') + '</div>'
+    + '</div>'
+    + '<div class="bar-wrap"><div class="bar-fill" style="width:' + barW + '%;background:' + color + '"></div></div>'
+    + '<div class="supply-foot"><span>Em circulação: ' + fmt(mkt) + '</span><span>FDV total: ' + fmt(fdv) + '</span></div>'
+    + '</div>';
+}
+
+function renderResult(p) {
+  var liq = (p.liquidity && p.liquidity.usd) || 0;
+  var vol = (p.volume && p.volume.h24) || 0;
+  var buys = (p.txns && p.txns.h24 && p.txns.h24.buys) || 0;
+  var sells = (p.txns && p.txns.h24 && p.txns.h24.sells) || 0;
+  var fdv = p.fdv || 0;
+  var mkt = p.marketCap || 0;
+  var liqQ = (p.liquidity && p.liquidity.quote) || 0;
+  var liqB = (p.liquidity && p.liquidity.base) || 0;
+  var sym = (p.baseToken && p.baseToken.symbol) || '—';
+  var addr = (p.baseToken && p.baseToken.address) || '';
+  var name = (p.baseToken && p.baseToken.name) || '—';
+  var pc = p.priceChange || {};
+  var total = buys + sells;
+  var buyPct = total > 0 ? Math.round((buys/total)*100) : 0;
+
+  var flags = analyzeFlags(liq, vol, buys, sells, fdv, mkt, p.pairCreatedAt);
+  var sc = getScenario(flags, liq);
+  var liqColor = liq < 1 ? '#E24B4A' : liq < 5000 ? '#EF9F27' : '#1D9E75';
+  var liqBarW = Math.min(100, (liq/100000)*100);
+
+  var time = analysisTime ? analysisTime.toLocaleString('pt-BR') : '';
+
+  var html = '';
+
+  // Diagnóstico
+  html += '<div class="diag-box" style="border:1.5px solid ' + sc.color + ';box-shadow:0 0 20px ' + sc.glow + '">'
+    + '<div class="diag-header">'
+    + '<div><div class="diag-label">Diagnóstico · ' + time + '</div>'
+    + '<div class="diag-title" style="color:' + sc.color + '">' + sc.label + '</div>'
+    + '<div class="diag-sub">' + name + ' · ' + sym + ' · ' + (p.dexId || '—') + '</div>'
+    + '</div>'
+    + '<div class="score-ring">' + scoreRing(sc.score, sc.color) + '<div class="score-label-small">Risk Score</div></div>'
+    + '</div>'
+    + '<div class="flags">' + renderFlags(flags) + '</div>'
+    + '<button class="copy-btn" id="copyBtn" onclick="copyResume()">Copiar resumo</button>'
+    + '</div>';
+
+  // Contract
+  html += '<div class="card">'
+    + '<div class="card-title">Contract Address</div>'
+    + '<div style="font-size:11px;color:#7F77DD;font-family:monospace;word-break:break-all;margin-bottom:10px">' + addr + '</div>'
+    + '<div class="links">'
+    + '<a class="ext-link" href="https://solscan.io/token/' + addr + '" target="_blank">Solscan ↗</a>'
+    + '<a class="ext-link" href="' + (p.url || '#') + '" target="_blank">DexScreener ↗</a>'
+    + '<a class="ext-link" href="https://web3.okx.com/pt-BR/token/solana/' + addr + '" target="_blank">OKX Web3 ↗</a>'
+    + '</div></div>';
+
+  // Authorities
+  html += '<div class="card">'
+    + '<div class="card-title">Authorities do Contrato</div>'
+    + '<div class="grid3" style="margin-bottom:12px">'
+    + authCard('Mint Authority', 'Verificar no Solscan', false)
+    + authCard('Freeze Authority', 'Verificar no Solscan', false)
+    + authCard('Update Authority', 'Verificar no Solscan', false)
+    + '</div>'
+    + '<div class="card-title">Supply fora de circulação</div>'
+    + renderSupply(fdv, mkt)
+    + '</div>';
+
+  // Liquidez
+  html += '<div class="card">'
+    + '<div class="card-title">Liquidez</div>'
+    + '<div class="grid3">'
+    + '<div class="stat"><div class="stat-label">Total (USD)</div><div class="liq-big" style="color:' + liqColor + '">' + fmt(liq) + '</div><div class="bar-wrap"><div class="bar-fill" style="width:' + liqBarW + '%;background:' + liqColor + '"></div></div></div>'
+    + '<div class="stat"><div class="stat-label">Pooled SOL</div><div class="stat-value">' + Number(liqQ).toFixed(4) + ' SOL</div></div>'
+    + '<div class="stat"><div class="stat-label">Pooled ' + sym + '</div><div class="stat-value">' + Number(liqB).toLocaleString() + '</div></div>'
+    + '</div></div>';
+
+  // Volume
+  html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">'
+    + '<div class="card" style="margin-bottom:0">'
+    + '<div class="card-title">Volume e Negociações (24h)</div>'
+    + '<div class="grid2">'
+    + statCard('Volume', fmt(vol))
+    + statCard('Transações', (buys+sells).toLocaleString())
+    + statCard('Compras', buys.toLocaleString(), '#1D9E75')
+    + statCard('Vendas', sells.toLocaleString(), '#E24B4A')
+    + '</div>'
+    + '<div class="buysell-wrap"><div class="buysell-labels"><span style="color:#1D9E75">Compras ' + buyPct + '%</span><span style="color:#E24B4A">Vendas ' + (100-buyPct) + '%</span></div><div class="buysell-bar"><div class="buysell-fill" style="width:' + buyPct + '%"></div></div></div>'
+    + '</div>'
+    + '<div class="card" style="margin-bottom:0">'
+    + '<div class="card-title">Preço e Variação</div>'
+    + '<div style="font-size:18px;font-weight:500;color:#e0e0e0;margin-bottom:10px">$' + (p.priceUsd || '0') + '</div>'
+    + '<div class="grid2">'
+    + statCard('5m', pct(pc.m5), pctColor(pc.m5))
+    + statCard('1h', pct(pc.h1), pctColor(pc.h1))
+    + statCard('6h', pct(pc.h6), pctColor(pc.h6))
+    + statCard('24h', pct(pc.h24), pctColor(pc.h24))
+    + '</div></div></div>';
+
+  // Market cap
+  html += '<div class="card">'
+    + '<div class="card-title">Market Cap</div>'
+    + '<div class="grid4">'
+    + statCard('Market Cap', fmt(mkt))
+    + statCard('FDV', fmt(fdv))
+    + statCard('Par criado', timeAgo(p.pairCreatedAt))
+    + statCard('Token mintado', timeAgo(p.pairCreatedAt))
+    + '</div>';
+  if (fdv > 0 && mkt > 0 && Math.abs(fdv-mkt)/fdv < 0.01) {
+    html += '<div style="margin-top:8px;font-size:11px;color:#7F77DD;background:#10102a;border:0.5px solid #303070;border-radius:6px;padding:6px 10px">FDV = Market Cap — 100% do supply em circulação desde o lançamento</div>';
+  }
+  html += '</div>';
+
+  // Dev wallet
+  html += '<div class="card">'
+    + '<div class="card-title">Dev Wallet</div>'
+    + '<div style="background:#060a10;border:0.5px solid #1e2530;border-radius:8px;padding:10px 12px;display:flex;align-items:center;justify-content:space-between;gap:10px">'
+    + '<div><div style="font-size:10px;color:#555;margin-bottom:2px">Endereço do par</div><div style="font-size:11px;color:#7F77DD;font-family:monospace">' + (p.pairAddress || '—') + '</div></div>'
+    + '<a class="ext-link" href="https://solscan.io/account/' + (p.pairAddress || '') + '" target="_blank" style="flex-shrink:0">Solscan ↗</a>'
+    + '</div></div>';
+
+  document.getElementById('result').innerHTML = html;
+  currentToken = { name:name, symbol:sym, address:addr, dex:p.dexId, liq:liq, vol:vol, mkt:mkt, fdv:fdv, score:sc.score, label:sc.label, flags:flags, price:p.priceUsd };
+}
+
+function authCard(label, val, isOk) {
+  var color = isOk ? '#1D9E75' : '#EF9F27';
+  return '<div style="background:#060a10;border:0.5px solid #1e2530;border-radius:8px;padding:10px 12px">'
+    + '<div style="font-size:10px;color:#555;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">' + label + '</div>'
+    + '<div style="display:flex;align-items:center;gap:6px">'
+    + '<div style="width:6px;height:6px;border-radius:50%;background:' + color + ';flex-shrink:0"></div>'
+    + '<div style="font-size:12px;color:' + color + ';font-family:monospace;word-break:break-all">' + val + '</div>'
+    + '</div></div>';
+}
+
+function statCard(label, val, color) {
+  return '<div class="stat"><div class="stat-label">' + label + '</div><div class="stat-value" style="color:' + (color||'#e0e0e0') + '">' + val + '</div></div>';
+}
+
+function copyResume() {
+  if (!currentToken) return;
+  var flagText = currentToken.flags.map(function(f){ return '• [' + f.level + '] ' + f.text; }).join('\n');
+  var text = [
+    '=== OKX Rug Pull Detector ===',
+    'Analisado em: ' + (analysisTime ? analysisTime.toLocaleString('pt-BR') : ''),
+    'Token: ' + currentToken.name + ' (' + currentToken.symbol + ')',
+    'Contract: ' + currentToken.address,
+    'DEX: ' + currentToken.dex,
+    'Risk Score: ' + currentToken.score + '/100',
+    'Diagnóstico: ' + currentToken.label,
+    '',
+    'Liquidez: ' + fmt(currentToken.liq),
+    'Volume 24h: ' + fmt(currentToken.vol),
+    'Market Cap: ' + fmt(currentToken.mkt),
+    'FDV: ' + fmt(currentToken.fdv),
+    'Preço: $' + currentToken.price,
+    '',
+    'Flags detectadas:',
+    flagText,
+    '============================='
+  ].join('\n');
+  navigator.clipboard.writeText(text).then(function() {
+    var btn = document.getElementById('copyBtn');
+    if (btn) { btn.textContent = '✓ Copiado para internal note'; btn.classList.add('copied'); setTimeout(function(){ btn.textContent = 'Copiar resumo'; btn.classList.remove('copied'); }, 2500); }
+  });
+}
+
+function analyze() {
+  var q = document.getElementById('addressInput').value.trim();
+  if (!q) return;
+  var btn = document.getElementById('analyzeBtn');
+  btn.disabled = true;
+  btn.textContent = 'Analisando...';
+  currentToken = null;
+
+  document.getElementById('result').innerHTML = '<div class="loading"><div class="spinner"></div>Buscando dados na blockchain...</div>';
+
+  fetch('https://okx-rugpull-proxy.vercel.app/api/proxy?address=' + q)
+    .then(function(r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    })
+    .then(function(data) {
+      var pairs = Array.isArray(data) ? data : [];
+      if (pairs.length === 0) {
+        document.getElementById('result').innerHTML = '<div class="error-box"><div class="error-title">Token não encontrado</div><div class="error-msg">Nenhum par encontrado na Solana para esse endereço.</div></div>';
+        return;
+      }
+      pairs.sort(function(a,b){ return ((b.liquidity&&b.liquidity.usd)||0) - ((a.liquidity&&a.liquidity.usd)||0); });
+      analysisTime = new Date();
+      renderResult(pairs[0]);
+    })
+    .catch(function(e) {
+      document.getElementById('result').innerHTML = '<div class="error-box"><div class="error-title">Erro ao buscar dados</div><div class="error-msg">' + e.message + '</div></div>';
+    })
+    .finally(function() {
+      btn.disabled = false;
+      btn.textContent = 'Analisar →';
+    });
+}
+
+document.getElementById('addressInput').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') analyze();
+});
+</script>
+</body>
+</html>
