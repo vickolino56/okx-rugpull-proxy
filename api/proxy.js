@@ -1,4 +1,4 @@
-const https = requiere("https")
+const https = require("https")
 module.exports = function handler (req, res) {
   res.setHeader("Access-control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
@@ -20,7 +20,7 @@ if (!address) {
     apiRes.on("data", function(chunk) { body += chunk; });
     apiRes.on("end", function(){
       try { 
-      var data = json.parse(body);
+      var data = JSON.parse(body);
         res.status(200).json(data);
       } catch(e) {
         res.status(500).json({ error: "parse error" });
