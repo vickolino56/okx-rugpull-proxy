@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Rug Pull Detector</title>
+<title>Token Risk Analyzer</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #080c12; color: #e0e0e0; min-height: 100vh; padding-bottom: 40px; }
@@ -189,8 +189,8 @@
   <div class="header-left">
     <div class="header-logo">R</div>
     <div>
-      <div class="header-title">Rug Pull Detector <span style="font-size:10px;color:#444;font-weight:400">v5.7</span></div>
-      <div class="header-sub">Token Risk Analyzer · Solana</div>
+      <div class="header-title">Token Risk Analyzer <span style="font-size:10px;color:#444;font-weight:400">v1.0</span></div>
+      <div class="header-sub">Solana · Token Risk Analysis</div>
     </div>
   </div>
 </div>
@@ -208,7 +208,7 @@
     </div>
   </div>
   <div id="result"></div>
-  <div class="footer">Feito por Vinicius Fernandes · Solana</div>
+  <div class="footer">Token Risk Analyzer · Feito por Vinicius Fernandes · Solana</div>
 </div>
 
 <script>
@@ -217,7 +217,7 @@ var analysisTime = null;
 var currentAddress = null;
 var sessionHistory = [];
 var allPairsData = [];
-var PROXY_BASE = 'https://okx-rugpull-proxy.vercel.app';
+var PROXY_BASE = 'https://risktokenanalyzer.vercel.app';
 
 // ─────────────────────────────────────────────
 // UTILITIES
@@ -1071,7 +1071,7 @@ function copyConclusionNote(){
   if(!currentToken) return;
   var risk=currentToken.risk;
   var lines=[
-    '=== Rug Pull Detector v5.7 ===',
+    '=== Token Risk Analyzer v1.0 ===',
     'Token: '+currentToken.name+' ('+currentToken.symbol+')',
     'Contract: '+currentToken.address,
     'Analisado em: '+(analysisTime?analysisTime.toLocaleString('pt-BR'):''),
@@ -1100,7 +1100,7 @@ function copyResume(idx){
   var ps=risk.pairStatuses[idx];
   var flagText=(ps&&ps.flags||[]).map(function(f){return '• ['+f.key+'] '+f.agent;}).join('\n');
   var text=[
-    '=== Rug Pull Detector v5.7 ===',
+    '=== Token Risk Analyzer v1.0 ===',
     'Analisado em: '+(analysisTime?analysisTime.toLocaleString('pt-BR'):''),
     'Token: '+name+' ('+sym+')','Contract: '+addr,'',
     '-- VISÃO CONSOLIDADA --',
