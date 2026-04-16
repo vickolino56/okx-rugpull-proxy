@@ -460,9 +460,11 @@ function getScoreAndFlags(liq,vol,buys,sells,fdv,mkt,pairCreatedAt,pc24,liqBase,
     if(solPriceUSD>0){
       var quoteUSD=liqQuote*solPriceUSD;
       var quotePct=liq>0?(quoteUSD/liq)*100:50;
-      if(quotePct<5){
+      // Flag only if SOL side is < 5% AND absolute USD value of SOL < $750K
+      // Avoids flagging large pools like TRUMP where 3% = $2M in SOL
+      if(quotePct<5 && quoteUSD<750000){
         add('SPREAD',
-          'O pool contém quase exclusivamente tokens e muito pouco SOL em valor ('+quotePct.toFixed(1)+'% do pool em SOL). Qualquer venda vai colapsar o preço imediatamente por falta de contraparte.',
+          'O pool contém quase exclusivamente tokens e muito pouco SOL em valor ('+quotePct.toFixed(1)+'% do pool em SOL = '+fmt(quoteUSD)+'). Qualquer venda vai colapsar o preço imediatamente por falta de contraparte.',
           'SOL representa apenas '+quotePct.toFixed(1)+'% do valor total do pool ('+fmt(quoteUSD)+' de '+fmt(liq)+').');
       }
     }
