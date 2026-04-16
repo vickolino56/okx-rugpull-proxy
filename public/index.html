@@ -112,6 +112,7 @@
   .pair-tab.tab-rug.active  { border-bottom-color: #E24B4A; color: #E24B4A; }
   .pair-tab.tab-crit.active { border-bottom-color: #E24B4A; color: #E24B4A; }
   .pair-tab.tab-high.active { border-bottom-color: #EF9F27; color: #EF9F27; }
+  .pair-tab.tab-mod.active  { border-bottom-color: #E8A838; color: #E8A838; }
   .pair-tab.tab-med.active  { border-bottom-color: #7F77DD; color: #7F77DD; }
   .pair-tab-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
   .pair-tab-content { display: none; }
@@ -262,9 +263,10 @@ function loadHistory(addr){document.getElementById('addressInput').value=addr;an
 // RISK LEVELS
 // ─────────────────────────────────────────────
 var RISK_LEVELS=[
-  {min:100,label:'Possível Fraude',   color:'#E24B4A',level:'FRAUD'},
-  {min:75, label:'Risco Crítico',     color:'#E24B4A',level:'CRIT' },
-  {min:46, label:'Alto Risco',        color:'#EF9F27',level:'HIGH' },
+  {min:90, label:'Possível Fraude',   color:'#E24B4A',level:'FRAUD'},
+  {min:80, label:'Risco Crítico',     color:'#E24B4A',level:'CRIT' },
+  {min:55, label:'Alto Risco',        color:'#EF9F27',level:'HIGH' },
+  {min:35, label:'Risco Moderado',    color:'#E8A838',level:'MOD'  },
   {min:21, label:'Atenção',           color:'#7F77DD',level:'MED'  },
   {min:0,  label:'Sem Risco Aparente',color:'#1D9E75',level:'OK'   },
 ];
@@ -305,11 +307,13 @@ var FLAG_DEFS={
   LIQ_MCAP: {weight:15,level:'HIGH'},
   FDV_LIQ:  {weight:20,level:'HIGH'},
   NEAR_ZERO:{weight:10,level:'MED'},
-  SPREAD:   {weight:15,level:'HIGH'},
-  MAKERS:   {weight:20,level:'HIGH'},
+  SPREAD:    {weight:15,level:'HIGH'},
+  MAKERS:    {weight:20,level:'HIGH'},
+  STAGNANT:  {weight:15,level:'MOD'},  // active token but very low activity for age
+  ABANDONED: {weight:18,level:'MOD'},  // very old token with near-zero activity
 };
-var MAX_RAW=293;
-var LEVEL_FLOOR={HIGH:46,MED:21,OK:0};
+var MAX_RAW=326;
+var LEVEL_FLOOR={HIGH:55,MOD:35,MED:21,OK:0};
 
 function getScoreAndFlags(liq,vol,buys,sells,fdv,mkt,pairCreatedAt,pc24,liqBase,liqQuote,makers,ctx){
   var flags=[],rawScore=0;
@@ -378,8 +382,23 @@ function getScoreAndFlags(liq,vol,buys,sells,fdv,mkt,pairCreatedAt,pc24,liqBase,
   // SUPPLY
   if(fdv>0&&mkt>0&&Math.abs(fdv-mkt)/fdv<0.01) add('SUPPLY','100% do supply já está em circulação. O criador pode vender qualquer quantidade sem restrições.','FDV igual ao Market Cap.');
 
-  // TOKEN MORTO — only for isolated tokens
+  // TOKEN MORTO — volume zerado ou quase, pool inativa
   if(vol<500&&age>7&&total<50&&!isHighLiq&&!isMedLiq) add('DEAD','Volume extremamente baixo para um token com mais de 7 dias. Pool praticamente inativa.','Volume 24h de apenas '+fmt(vol)+' com '+total+' transações.');
+
+  // TOKEN ESTAGNADO — ativo há algum tempo mas com atividade muito baixa para a idade
+  // Cobre casos como: 300 dias, $844 volume, 13 transações
+  if(!isHighLiq&&!isMedLiq&&age>30&&vol<1000&&total<20&&flags.every(function(f){return f.key!=='DEAD';})){
+    add('STAGNANT',
+      'Token com '+Math.floor(age)+' dias de existência e apenas '+total+' transações nas últimas 24h. Atividade muito baixa para a idade do token — projeto possivelmente abandonado ou sem interesse de mercado.',
+      'Idade: '+Math.floor(age)+' dias · Volume 24h: '+fmt(vol)+' · Transações: '+total+'.');
+  }
+
+  // TOKEN ABANDONADO — muito antigo, atividade quase inexistente
+  if(!isHighLiq&&age>90&&total<10&&flags.every(function(f){return f.key!=='DEAD'&&f.key!=='STAGNANT';})){
+    add('ABANDONED',
+      'Token com '+Math.floor(age)+' dias de existência e apenas '+total+' transação'+(total===1?'':'ões')+' nas últimas 24h. Projeto aparentemente abandonado — a venda é tecnicamente possível mas com baixíssima demanda de mercado.',
+      'Idade: '+Math.floor(age)+' dias · Transações 24h: '+total+'.');
+  }
 
   // PUMP & DUMP
   if(pc24n!=null&&pc24n<=-85&&vol<500&&age>7&&!isHighLiq) add('PUMP_DUMP','Padrão consistente com pump & dump: queda severa e volume próximo de zero.','Queda de '+Math.abs(pc24n).toFixed(1)+'% com volume de apenas '+fmt(vol)+'.');
@@ -450,6 +469,8 @@ var FLAG_STYLE={
   NEAR_ZERO:{color:'#7F77DD',bg:'#10102a',border:'#303070',label:'Atenção'},
   SPREAD:   {color:'#EF9F27',bg:'#1f1208',border:'#5a3010',label:'Alto Risco'},
   MAKERS:   {color:'#EF9F27',bg:'#1f1208',border:'#5a3010',label:'Atividade Suspeita'},
+  STAGNANT: {color:'#E8A838',bg:'#1a1208',border:'#4a3010',label:'Token Estagnado'},
+  ABANDONED:{color:'#E8A838',bg:'#1a1208',border:'#4a3010',label:'Projeto Abandonado'},
   OK:       {color:'#1D9E75',bg:'#081a12',border:'#1a4530',label:'OK'},
 };
 
@@ -460,7 +481,8 @@ var FLAG_SHORT={
   ABANDON:'Pool inativa',PUMP:'Pump artificial',SUPPLY:'100% supply circulando',
   DEAD:'Token sem volume',PUMP_DUMP:'Pump & Dump',LIQ_MCAP:'Liq. < 1% MCAP',
   FDV_LIQ:'FDV > 1000x liquidez',NEAR_ZERO:'Valor próximo de zero',
-  SPREAD:'Pool sem SOL',MAKERS:'Atividade concentrada',OK:'Sem alertas'
+  SPREAD:'Pool sem SOL',MAKERS:'Atividade concentrada',
+  STAGNANT:'Token estagnado',ABANDONED:'Projeto abandonado',OK:'Sem alertas'
 };
 
 function renderFlags(flags){
@@ -534,9 +556,9 @@ function getConsolidatedRisk(pairs){
     consolidatedScore=totalWeight>0?Math.min(99,Math.round(weightedSum/totalWeight)):0;
 
     // Apply floor only from flags that appear on PRIMARY pools
-    // For high-liq tokens, cap floor at MED (45) so secondary pool issues never push consolidated to HIGH
+    // For high-liq tokens, cap floor at Atenção (34) so secondary pool issues never push consolidated to MOD+
     var floor=0;
-    var floorCap = isHighLiqToken ? 45 : 999;
+    var floorCap = isHighLiqToken ? 34 : 999;
     allFlags.forEach(function(k){
       if(k==='RUG'||k==='LIQ_SEC') return;
       // Only raise floor if this flag appears on at least one non-secondary pool
@@ -549,12 +571,12 @@ function getConsolidatedRisk(pairs){
     });
     consolidatedScore=Math.max(consolidatedScore,floor);
 
-    // High-liq token with healthy primary pools: hard cap at Atenção (45)
+    // High-liq token with healthy primary pools: hard cap at Atenção (34)
     if(isHighLiqToken && rugCount===0){
       var top2healthy=pairStatuses.slice(0,2).every(function(ps){
         return ps.level.level==='OK'||ps.level.level==='MED';
       });
-      if(top2healthy) consolidatedScore=Math.min(consolidatedScore,45);
+      if(top2healthy) consolidatedScore=Math.min(consolidatedScore,34);
     }
 
     finalLevel=scoreToLevel(consolidatedScore);
@@ -680,6 +702,20 @@ function buildConclusion(risk){
     conclusionText='Padrão consistente com pump & dump: queda severa de preço combinada com volume praticamente zerado. O token perdeu quase todo o valor desde o lançamento.';
     clientLabel='Alto Risco · Oriente o cliente sobre o valor real'; clientColor='#E24B4A';
     clientText='Informe ao cliente que o token apresenta padrão de pump & dump. A venda pode ser tentada, mas o valor obtido provavelmente será muito inferior ao exibido na carteira. O cliente deve estar ciente antes de prosseguir.';
+  }
+
+  // ── Scenario: Abandoned project (very old, near-zero activity)
+  else if(flags.indexOf('ABANDONED')>=0){
+    conclusionText='Token com '+Math.floor(ageDays(risk.pairStatuses[0]&&risk.pairStatuses[0].pairCreatedAt))+' dias de existência e atividade praticamente inexistente. A liquidez está presente e a venda é tecnicamente possível, mas a demanda de mercado é quase nula — projeto aparentemente abandonado.';
+    clientLabel='Risco Moderado · Projeto aparentemente abandonado'; clientColor='#E8A838';
+    clientText='Informe ao cliente que o token existe e tem liquidez disponível, porém o projeto apresenta sinais de abandono. A venda pode ser realizada, mas o cliente deve estar ciente de que o valor obtido pode ser inferior ao esperado devido à baixíssima demanda.';
+  }
+
+  // ── Scenario: Stagnant token (old but very low activity)
+  else if(flags.indexOf('STAGNANT')>=0){
+    conclusionText='Token com histórico longo mas atividade muito baixa para sua idade. A liquidez está presente e a venda é tecnicamente possível, porém com pouca demanda de mercado ativa. Pode indicar um projeto que não evoluiu ou perdeu o interesse da comunidade.';
+    clientLabel='Risco Moderado · Token com baixa atividade'; clientColor='#E8A838';
+    clientText='Informe ao cliente que o token tem liquidez disponível para venda, mas apresenta atividade muito baixa. A transação pode ser executada, porém o preço obtido pode variar significativamente do exibido na carteira devido à baixa profundidade de mercado.';
   }
 
   // ── Scenario 7: Dead token + unbalanced pool
@@ -833,6 +869,7 @@ function tabClass(lv){
   if(lv==='FRAUD') return 'tab-rug';
   if(lv==='CRIT')  return 'tab-crit';
   if(lv==='HIGH')  return 'tab-high';
+  if(lv==='MOD')   return 'tab-mod';
   if(lv==='MED')   return 'tab-med';
   return '';
 }
