@@ -63,31 +63,22 @@
   .consolidated-stat-label { font-size: 10px; color: #555; margin-bottom: 2px; }
   .consolidated-stat-value { font-size: 14px; font-weight: 500; }
 
-  /* CRITICAL POINTS STRIP */
   .critical-points { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 0.5px solid #1e253088; }
   .critical-point { display: flex; align-items: center; gap: 5px; font-size: 11px; padding: 4px 9px; border-radius: 5px; border: 0.5px solid; }
   .critical-point-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
 
-  /* POOL STATUS */
   .pool-status-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
   .pool-status-row { display: flex; align-items: center; gap: 8px; font-size: 11px; padding: 6px 10px; border-radius: 6px; background: #060a1066; }
   .pool-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
   .pool-row-link { color: #555; font-family: monospace; font-size: 10px; text-decoration: underline; text-decoration-color: #2a3040; }
   .pool-row-link:hover { color: #888; }
 
-  /* TOKEN STRIP */
   .token-strip { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; background: #060a1088; border: 0.5px solid #1e2530; border-radius: 8px; flex-wrap: wrap; }
   .token-strip-name { font-size: 12px; font-weight: 500; color: #e0e0e0; }
   .token-strip-addr { font-size: 10px; color: #7F77DD; font-family: monospace; word-break: break-all; margin-top: 2px; }
   .token-strip-links { display: flex; gap: 6px; flex-shrink: 0; flex-wrap: wrap; }
   .token-strip-link { font-size: 11px; padding: 3px 9px; border-radius: 5px; border: 0.5px solid #1e2530; color: #666; background: #060a10; white-space: nowrap; }
   .token-strip-link:hover { color: #999; }
-
-  /* ACTION BOX */
-  .action-box { border-radius: 12px; padding: 14px 16px; margin-bottom: 12px; border: 1.5px solid; }
-  .action-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 5px; font-weight: 500; }
-  .action-title { font-size: 15px; font-weight: 500; margin-bottom: 5px; }
-  .action-desc { font-size: 12px; line-height: 1.6; opacity: 0.85; }
 
   .diag-box { background: #0a0e16; border-radius: 14px; padding: 18px 20px; margin-bottom: 12px; }
   .diag-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 14px; gap: 12px; }
@@ -121,7 +112,7 @@
   .pair-tab-content { display: none; }
   .pair-tab-content.active { display: block; padding-top: 12px; }
 
-  /* CONCLUSION TAB */
+  /* CONCLUSION */
   .concl-header { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
   .concl-icon { width: 36px; height: 36px; border-radius: 10px; background: #378ADD22; border: 0.5px solid #378ADD44; display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; }
   .concl-title { font-size: 16px; font-weight: 500; color: #e0e0e0; }
@@ -131,6 +122,13 @@
   .concl-verdict-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
   .concl-verdict-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
   .concl-verdict-text { font-size: 12px; line-height: 1.6; color: #ccc; }
+
+  /* WHAT TO TELL THE CLIENT */
+  .client-box { border-radius: 10px; padding: 14px 16px; margin-bottom: 12px; border: 1.5px solid; }
+  .client-box-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; font-weight: 500; }
+  .client-box-title { font-size: 14px; font-weight: 500; margin-bottom: 8px; }
+  .client-box-text { font-size: 12px; line-height: 1.8; color: #ccc; }
+
   .concl-summary { background: #060a10; border: 0.5px solid #1e2530; border-radius: 10px; padding: 14px 16px; margin-bottom: 12px; }
   .concl-summary-title { font-size: 10px; color: #555; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px; }
   .concl-summary-text { font-size: 12px; color: #888; line-height: 1.8; }
@@ -184,7 +182,7 @@
   <div class="header-left">
     <div class="header-logo">R</div>
     <div>
-      <div class="header-title">Rug Pull Detector <span style="font-size:10px;color:#444;font-weight:400">v5.4</span></div>
+      <div class="header-title">Rug Pull Detector <span style="font-size:10px;color:#444;font-weight:400">v5.5</span></div>
       <div class="header-sub">Token Risk Analyzer · Solana</div>
     </div>
   </div>
@@ -267,173 +265,152 @@ function scoreRing(score,color) {
 }
 
 // ─────────────────────────────────────────────
-// FLAGS + SCORE (accumulative)
-// Max raw without RUG: 35+20+25+25+15+20+10+5+20+30+15+20+10+15 = 265
+// FLAGS + SCORE
+// Score uses flag-level minimum floor to avoid underrepresentation
+// Each flag contributes its individual weight; final score is the
+// MAX of (sum-normalized, level-floor) so a single critical flag
+// always produces a meaningful score.
 // ─────────────────────────────────────────────
+var FLAG_DEFS = {
+  LIQ_HI:    { weight:35, level:'HIGH' },
+  LIQ_MED:   { weight:15, level:'MED'  },
+  VOL:       { weight:20, level:'HIGH' },
+  AGE_HI:    { weight:25, level:'HIGH' },
+  AGE_MED:   { weight:10, level:'MED'  },
+  DUMP:      { weight:25, level:'HIGH' },
+  SELL:      { weight:15, level:'HIGH' },
+  ABANDON:   { weight:20, level:'HIGH' },
+  PUMP:      { weight:10, level:'MED'  },
+  SUPPLY:    { weight:5,  level:'MED'  },
+  DEAD:      { weight:20, level:'HIGH' },
+  PUMP_DUMP: { weight:30, level:'HIGH' },
+  LIQ_MCAP:  { weight:15, level:'HIGH' },
+  FDV_LIQ:   { weight:20, level:'HIGH' },
+  NEAR_ZERO: { weight:10, level:'MED'  },
+  SPREAD:    { weight:15, level:'HIGH' },
+};
 var MAX_RAW = 265;
 
-function getScoreAndFlags(liq, vol, buys, sells, fdv, mkt, pairCreatedAt, pc24, liqBase, liqQuote) {
+// Level floors: even a single flag of this level produces at least this score
+var LEVEL_FLOOR = { HIGH: 46, MED: 21, OK: 0 };
+
+function getScoreAndFlags(liq,vol,buys,sells,fdv,mkt,pairCreatedAt,pc24,liqBase,liqQuote) {
   var flags=[], rawScore=0;
   var total=buys+sells;
   var sellRatio=total>0?(sells/total)*100:50;
   var buyRatio =total>0?(buys/total)*100:50;
   var age=ageDays(pairCreatedAt);
-  var pc24n = pc24!=null ? Number(pc24) : null;
+  var pc24n=pc24!=null?Number(pc24):null;
 
-  // ── RUG (short-circuit) ──
-  if (liq<5) {
-    flags.push({key:'RUG', agent:'A liquidez deste pool é praticamente zero ('+fmt(liq)+'). O cliente não conseguirá vender — liquidez possivelmente removida.', tech:'Liquidez menor que $5.'});
-    return {rawScore:100, flags:flags};
+  // RUG — short circuit
+  if(liq<5){
+    flags.push({key:'RUG',agent:'A liquidez deste pool é praticamente zero ('+fmt(liq)+'). O cliente não conseguirá vender — liquidez possivelmente removida.',tech:'Liquidez menor que $5.'});
+    return {rawScore:100,flags:flags};
   }
 
-  // ── LIQUIDEZ ──
-  if (liq<1000) {
-    rawScore+=35;
-    flags.push({key:'LIQ_HI', agent:'Liquidez insuficiente para qualquer troca. A venda pode falhar ou resultar em grande perda de valor.', tech:'Liquidez crítica de '+fmt(liq)+'.'});
-  } else if (liq<5000) {
-    rawScore+=15;
-    flags.push({key:'LIQ_MED', agent:'Liquidez baixa — o cliente pode conseguir vender mas receberá menos do que o valor exibido.', tech:'Liquidez de '+fmt(liq)+'.'});
+  function addFlag(key,agent,tech){
+    rawScore+=FLAG_DEFS[key].weight;
+    flags.push({key:key,agent:agent,tech:tech});
   }
 
-  // ── VOLUME DESPROPORCIONAL ──
-  if (vol>liq*10) {
-    rawScore+=20;
-    flags.push({key:'VOL', agent:'Volume desproporcional à liquidez — possíveis transações artificiais para simular atividade.', tech:'Volume 24h ('+fmt(vol)+') é '+Math.round(vol/liq)+'x maior que a liquidez.'});
+  if(liq<1000)  addFlag('LIQ_HI','Liquidez insuficiente para qualquer troca. A venda pode falhar ou resultar em grande perda de valor.','Liquidez crítica de '+fmt(liq)+'.');
+  else if(liq<5000) addFlag('LIQ_MED','Liquidez baixa — o cliente pode conseguir vender mas receberá menos do que o valor exibido.','Liquidez de '+fmt(liq)+'.');
+
+  if(vol>liq*10) addFlag('VOL','Volume desproporcional à liquidez — possíveis transações artificiais para simular atividade.','Volume 24h ('+fmt(vol)+') é '+Math.round(vol/liq)+'x maior que a liquidez.');
+
+  if(age<1)      addFlag('AGE_HI','Token criado há menos de 24 horas. Histórico insuficiente para avaliação.','Par criado há '+timeAgo(pairCreatedAt)+'.');
+  else if(age<7) addFlag('AGE_MED','Token com menos de 7 dias de existência. Histórico limitado.','Par criado há '+timeAgo(pairCreatedAt)+'.');
+
+  if(pc24n!=null&&pc24n<=-90) addFlag('DUMP','Queda de '+Math.abs(pc24n).toFixed(1)+'% nas últimas 24h — possível dump em andamento ou rug pull em curso.','Variação 24h: '+pct(pc24)+'.');
+
+  if(sellRatio>80&&total>0) addFlag('SELL','Mais de 80% das transações são vendas. Pressão vendedora anormal — possível dump coordenado.',Math.round(sellRatio)+'% das transações são vendas.');
+
+  if(total===0) addFlag('ABANDON','Nenhuma transação nas últimas 24 horas. Pool inativa — liquidez pode estar travada ou sem interesse de mercado.','Zero transações nas últimas 24h.');
+
+  if(buyRatio>90&&total>0) addFlag('PUMP','Quase todas as transações são compras, sem vendas equilibradas. Possível pump artificial.',Math.round(buyRatio)+'% das transações são compras.');
+
+  if(fdv>0&&mkt>0&&Math.abs(fdv-mkt)/fdv<0.01) addFlag('SUPPLY','100% do supply já está em circulação. O criador pode vender qualquer quantidade sem restrições de prazo.','FDV igual ao Market Cap.');
+
+  if(vol<500&&age>7&&total<50) addFlag('DEAD','Volume extremamente baixo para um token com mais de 7 dias. Pool praticamente inativa — dificilmente haverá liquidez suficiente para executar uma venda.','Volume 24h de apenas '+fmt(vol)+' com '+total+' transações.');
+
+  if(pc24n!=null&&pc24n<=-85&&vol<500&&age>7) addFlag('PUMP_DUMP','Padrão consistente com pump & dump: queda severa de preço após período de alta atividade histórica. O token perdeu quase todo o valor desde o lançamento.','Queda de '+Math.abs(pc24n).toFixed(1)+'% em 24h com volume atual de apenas '+fmt(vol)+'.');
+
+  if(mkt>0&&liq>0&&liq<mkt*0.01) addFlag('LIQ_MCAP','A liquidez disponível é inferior a 1% do Market Cap. Qualquer venda de volume médio vai colapsar o preço antes de ser executada.','Liquidez ('+fmt(liq)+') é apenas '+((liq/mkt)*100).toFixed(2)+'% do Market Cap ('+fmt(mkt)+').');
+
+  if(fdv>0&&liq>0&&fdv>liq*1000) addFlag('FDV_LIQ','O valor total do token no papel é mais de 1000x maior que a liquidez disponível. É praticamente impossível liquidar qualquer posição relevante.','FDV ('+fmt(fdv)+') é '+Math.round(fdv/liq)+'x maior que a liquidez ('+fmt(liq)+').');
+
+  if(mkt>0&&mkt<100) addFlag('NEAR_ZERO','Market Cap abaixo de $100. O token praticamente não possui valor de mercado — venda pode resultar em valor irrisório para o cliente.','Market Cap de apenas '+fmt(mkt)+'.');
+
+  if(liqBase>0&&liqQuote>0){
+    var baseRatio=(liqBase/(liqBase+liqQuote))*100;
+    if(baseRatio>99) addFlag('SPREAD','O pool contém quase exclusivamente tokens e muito pouco SOL. Qualquer tentativa de venda vai colapsar o preço imediatamente por falta de contraparte.','Token representa '+baseRatio.toFixed(1)+'% da liquidez do pool.');
   }
 
-  // ── IDADE ──
-  if (age<1) {
-    rawScore+=25;
-    flags.push({key:'AGE_HI', agent:'Token criado há menos de 24 horas. Histórico insuficiente para avaliação.', tech:'Par criado há '+timeAgo(pairCreatedAt)+'.'});
-  } else if (age<7) {
-    rawScore+=10;
-    flags.push({key:'AGE_MED', agent:'Token com menos de 7 dias de existência. Histórico limitado.', tech:'Par criado há '+timeAgo(pairCreatedAt)+'.'});
+  if(flags.length===0){
+    flags.push({key:'OK',agent:'Nenhum sinal de alerta automático detectado. Análise manual recomendada.',tech:'Nenhuma flag crítica detectada.'});
   }
 
-  // ── DUMP EM ANDAMENTO ──
-  if (pc24n!=null && pc24n<=-90) {
-    rawScore+=25;
-    flags.push({key:'DUMP', agent:'Queda de '+Math.abs(pc24n).toFixed(1)+'% nas últimas 24h — possível dump em andamento ou rug pull em curso.', tech:'Variação 24h: '+pct(pc24)+'.'});
-  }
-
-  // ── PRESSÃO VENDEDORA ──
-  if (sellRatio>80 && total>0) {
-    rawScore+=15;
-    flags.push({key:'SELL', agent:'Mais de 80% das transações são vendas. Pressão vendedora anormal — possível dump coordenado.', tech:Math.round(sellRatio)+'% das transações são vendas.'});
-  }
-
-  // ── POOL ABANDONADA ──
-  if (total===0) {
-    rawScore+=20;
-    flags.push({key:'ABANDON', agent:'Nenhuma transação nas últimas 24 horas. Pool inativa — liquidez pode estar travada ou sem interesse de mercado.', tech:'Zero transações nas últimas 24h.'});
-  }
-
-  // ── PUMP ARTIFICIAL ──
-  if (buyRatio>90 && total>0) {
-    rawScore+=10;
-    flags.push({key:'PUMP', agent:'Quase todas as transações são compras, sem vendas equilibradas. Possível pump artificial.', tech:Math.round(buyRatio)+'% das transações são compras.'});
-  }
-
-  // ── SUPPLY TOTAL ──
-  if (fdv>0 && mkt>0 && Math.abs(fdv-mkt)/fdv<0.01) {
-    rawScore+=5;
-    flags.push({key:'SUPPLY', agent:'100% do supply já está em circulação. O criador pode vender qualquer quantidade sem restrições de prazo.', tech:'FDV igual ao Market Cap.'});
-  }
-
-  // ── TOKEN MORTO ──
-  if (vol<500 && age>7 && total<50) {
-    rawScore+=20;
-    flags.push({key:'DEAD', agent:'Volume extremamente baixo para um token com mais de 7 dias. Pool praticamente inativa — dificilmente haverá liquidez suficiente para executar uma venda.', tech:'Volume 24h de apenas '+fmt(vol)+' com '+total+' transações.'});
-  }
-
-  // ── PUMP & DUMP ──
-  if (pc24n!=null && pc24n<=-85 && vol<500 && age>7) {
-    rawScore+=30;
-    flags.push({key:'PUMP_DUMP', agent:'Padrão consistente com pump & dump: queda severa de preço após período de alta atividade histórica. O token perdeu quase todo o valor desde o lançamento.', tech:'Queda de '+Math.abs(pc24n).toFixed(1)+'% em 24h com volume atual de apenas '+fmt(vol)+'.'});
-  }
-
-  // ── LIQUIDEZ vs MARKET CAP ──
-  if (mkt>0 && liq>0 && liq<mkt*0.01) {
-    rawScore+=15;
-    flags.push({key:'LIQ_MCAP', agent:'A liquidez disponível é inferior a 1% do Market Cap. Qualquer venda de volume médio vai colapsar o preço antes de ser executada.', tech:'Liquidez ('+fmt(liq)+') é apenas '+((liq/mkt)*100).toFixed(2)+'% do Market Cap ('+fmt(mkt)+').'});
-  }
-
-  // ── FDV ALTÍSSIMO vs LIQUIDEZ ──
-  if (fdv>0 && liq>0 && fdv>liq*1000) {
-    rawScore+=20;
-    flags.push({key:'FDV_LIQ', agent:'O valor total do token no papel é mais de 1000x maior que a liquidez disponível. É praticamente impossível liquidar qualquer posição relevante.', tech:'FDV ('+fmt(fdv)+') é '+Math.round(fdv/liq)+'x maior que a liquidez ('+fmt(liq)+').'});
-  }
-
-  // ── PREÇO PRÓXIMO DE ZERO ──
-  if (mkt>0 && fdv>0 && mkt<100) {
-    rawScore+=10;
-    flags.push({key:'NEAR_ZERO', agent:'Market Cap abaixo de $100. O token praticamente não possui valor de mercado — venda pode resultar em valor irrisório para o cliente.', tech:'Market Cap de apenas '+fmt(mkt)+'.'});
-  }
-
-  // ── SPREAD EXTREMO (quase só token, pouco SOL) ──
-  if (liqBase>0 && liqQuote>0) {
-    var totalLiqTokens = liqBase + liqQuote;
-    var baseRatio = (liqBase / totalLiqTokens) * 100;
-    if (baseRatio > 99) {
-      rawScore+=15;
-      flags.push({key:'SPREAD', agent:'O pool contém quase exclusivamente tokens e muito pouco SOL. Qualquer tentativa de venda vai colapsar o preço imediatamente por falta de contraparte.', tech:'Token representa '+baseRatio.toFixed(1)+'% da liquidez do pool.'});
-    }
-  }
-
-  if (flags.length===0) {
-    flags.push({key:'OK', agent:'Nenhum sinal de alerta automático detectado. Análise manual recomendada.', tech:'Nenhuma flag crítica detectada.'});
-  }
-
-  return {rawScore:rawScore, flags:flags};
+  return {rawScore:rawScore,flags:flags};
 }
 
-function normalizeScore(raw) {
-  if (raw>=100) return 100;
-  return Math.min(99, Math.round((raw/MAX_RAW)*99));
+function normalizeScore(raw,flags) {
+  if(raw>=100) return 100;
+  // Base normalization
+  var normalized = Math.min(99, Math.round((raw/MAX_RAW)*99));
+  // Apply level floor: find highest severity among flags
+  var floor = 0;
+  flags.forEach(function(f){
+    if(f.key==='RUG') return;
+    var def = FLAG_DEFS[f.key];
+    if(def){
+      var levelFloor = LEVEL_FLOOR[def.level]||0;
+      if(levelFloor>floor) floor=levelFloor;
+    }
+  });
+  return Math.max(normalized, floor);
 }
 
 function scoreToScenario(score) {
-  if (score>=100) return {label:'Rug Pull',           color:'#E24B4A', level:'RUG',  action:'NÃO confirme a possibilidade de venda ao cliente.',      actionDesc:'A liquidez deste pool foi removida. O token existe na carteira mas não pode ser vendido.'};
-  if (score>=75)  return {label:'Alto Risco Crítico', color:'#E24B4A', level:'CRIT', action:'Não confirme a venda. Riscos críticos detectados.',        actionDesc:'Este pool apresenta sinais críticos acumulados. A venda pode não ser possível ou resultar em perda severa.'};
-  if (score>=46)  return {label:'Alto Risco',         color:'#EF9F27', level:'HIGH', action:'Não garanta a venda. Oriente o cliente com cautela.',      actionDesc:'Múltiplos sinais de alerta detectados. A venda pode não ser possível ou resultar em perda significativa.'};
-  if (score>=21)  return {label:'Atenção',            color:'#7F77DD', level:'MED',  action:'Oriente o cliente sobre os riscos antes de prosseguir.',  actionDesc:'Sinais de atenção detectados. A venda pode ser possível mas há riscos.'};
-  return                  {label:'Normal',             color:'#1D9E75', level:'OK',   action:'Nenhum sinal crítico detectado. Prossiga com análise manual.', actionDesc:'Os dados automáticos não indicam fraude.'};
+  if(score>=100) return {label:'Rug Pull',           color:'#E24B4A',level:'RUG' };
+  if(score>=75)  return {label:'Alto Risco Crítico', color:'#E24B4A',level:'CRIT'};
+  if(score>=46)  return {label:'Alto Risco',         color:'#EF9F27',level:'HIGH'};
+  if(score>=21)  return {label:'Atenção',            color:'#7F77DD',level:'MED' };
+  return                 {label:'Normal',             color:'#1D9E75',level:'OK'  };
 }
 
 var FLAG_STYLE = {
-  RUG:       {color:'#E24B4A', bg:'#200808', border:'#5a1515', label:'Rug Pull'   },
-  LIQ_HI:   {color:'#EF9F27', bg:'#1f1208', border:'#5a3010', label:'Alto Risco' },
-  LIQ_MED:  {color:'#7F77DD', bg:'#10102a', border:'#303070', label:'Atenção'    },
-  VOL:       {color:'#EF9F27', bg:'#1f1208', border:'#5a3010', label:'Alto Risco' },
-  AGE_HI:   {color:'#EF9F27', bg:'#1f1208', border:'#5a3010', label:'Alto Risco' },
-  AGE_MED:  {color:'#7F77DD', bg:'#10102a', border:'#303070', label:'Atenção'    },
-  DUMP:      {color:'#E24B4A', bg:'#200808', border:'#5a1515', label:'Alto Risco' },
-  SELL:      {color:'#EF9F27', bg:'#1f1208', border:'#5a3010', label:'Alto Risco' },
-  ABANDON:   {color:'#EF9F27', bg:'#1f1208', border:'#5a3010', label:'Alto Risco' },
-  PUMP:      {color:'#7F77DD', bg:'#10102a', border:'#303070', label:'Atenção'    },
-  SUPPLY:    {color:'#7F77DD', bg:'#10102a', border:'#303070', label:'Atenção'    },
-  DEAD:      {color:'#EF9F27', bg:'#1f1208', border:'#5a3010', label:'Token Morto'},
-  PUMP_DUMP: {color:'#E24B4A', bg:'#200808', border:'#5a1515', label:'Pump & Dump'},
-  LIQ_MCAP:  {color:'#EF9F27', bg:'#1f1208', border:'#5a3010', label:'Alto Risco' },
-  FDV_LIQ:   {color:'#EF9F27', bg:'#1f1208', border:'#5a3010', label:'Alto Risco' },
-  NEAR_ZERO: {color:'#7F77DD', bg:'#10102a', border:'#303070', label:'Atenção'    },
-  SPREAD:    {color:'#EF9F27', bg:'#1f1208', border:'#5a3010', label:'Alto Risco' },
-  OK:        {color:'#1D9E75', bg:'#081a12', border:'#1a4530', label:'OK'         },
+  RUG:      {color:'#E24B4A',bg:'#200808',border:'#5a1515',label:'Rug Pull'   },
+  LIQ_HI:  {color:'#EF9F27',bg:'#1f1208',border:'#5a3010',label:'Alto Risco' },
+  LIQ_MED: {color:'#7F77DD',bg:'#10102a',border:'#303070',label:'Atenção'    },
+  VOL:      {color:'#EF9F27',bg:'#1f1208',border:'#5a3010',label:'Alto Risco' },
+  AGE_HI:  {color:'#EF9F27',bg:'#1f1208',border:'#5a3010',label:'Alto Risco' },
+  AGE_MED: {color:'#7F77DD',bg:'#10102a',border:'#303070',label:'Atenção'    },
+  DUMP:     {color:'#E24B4A',bg:'#200808',border:'#5a1515',label:'Alto Risco' },
+  SELL:     {color:'#EF9F27',bg:'#1f1208',border:'#5a3010',label:'Alto Risco' },
+  ABANDON:  {color:'#EF9F27',bg:'#1f1208',border:'#5a3010',label:'Alto Risco' },
+  PUMP:     {color:'#7F77DD',bg:'#10102a',border:'#303070',label:'Atenção'    },
+  SUPPLY:   {color:'#7F77DD',bg:'#10102a',border:'#303070',label:'Atenção'    },
+  DEAD:     {color:'#EF9F27',bg:'#1f1208',border:'#5a3010',label:'Token Morto'},
+  PUMP_DUMP:{color:'#E24B4A',bg:'#200808',border:'#5a1515',label:'Pump & Dump'},
+  LIQ_MCAP: {color:'#EF9F27',bg:'#1f1208',border:'#5a3010',label:'Alto Risco' },
+  FDV_LIQ:  {color:'#EF9F27',bg:'#1f1208',border:'#5a3010',label:'Alto Risco' },
+  NEAR_ZERO:{color:'#7F77DD',bg:'#10102a',border:'#303070',label:'Atenção'    },
+  SPREAD:   {color:'#EF9F27',bg:'#1f1208',border:'#5a3010',label:'Alto Risco' },
+  OK:       {color:'#1D9E75',bg:'#081a12',border:'#1a4530',label:'OK'         },
 };
 
-// Human-readable short labels for critical points strip
 var FLAG_SHORT = {
-  RUG:'Liquidez zerada', LIQ_HI:'Liquidez crítica', LIQ_MED:'Liquidez baixa',
-  VOL:'Volume artificial', AGE_HI:'Token < 24h', AGE_MED:'Token < 7 dias',
-  DUMP:'Dump em andamento', SELL:'Pressão vendedora', ABANDON:'Pool inativa',
-  PUMP:'Pump artificial', SUPPLY:'100% supply circulando',
-  DEAD:'Token sem volume', PUMP_DUMP:'Pump & Dump', LIQ_MCAP:'Liq. < 1% do MCAP',
-  FDV_LIQ:'FDV > 1000x liquidez', NEAR_ZERO:'Valor próximo de zero',
-  SPREAD:'Pool sem SOL', OK:'Sem alertas'
+  RUG:'Liquidez zerada',LIQ_HI:'Liquidez crítica',LIQ_MED:'Liquidez baixa',
+  VOL:'Volume artificial',AGE_HI:'Token < 24h',AGE_MED:'Token < 7 dias',
+  DUMP:'Dump em andamento',SELL:'Pressão vendedora',ABANDON:'Pool inativa',
+  PUMP:'Pump artificial',SUPPLY:'100% supply circulando',
+  DEAD:'Token sem volume',PUMP_DUMP:'Pump & Dump',LIQ_MCAP:'Liq. < 1% do MCAP',
+  FDV_LIQ:'FDV > 1000x liquidez',NEAR_ZERO:'Valor próximo de zero',
+  SPREAD:'Pool sem SOL',OK:'Sem alertas'
 };
 
 function renderFlags(flags) {
-  return flags.map(function(f) {
+  return flags.map(function(f){
     var fs=FLAG_STYLE[f.key]||FLAG_STYLE.OK;
     return '<div class="flag-item" style="background:'+fs.bg+';border:0.5px solid '+fs.border+'">'
       +'<span class="flag-badge" style="color:'+fs.color+';border:0.5px solid '+fs.border+';background:'+fs.bg+'">'+fs.label+'</span>'
@@ -444,63 +421,67 @@ function renderFlags(flags) {
 }
 
 // ─────────────────────────────────────────────
-// CONSOLIDATED RISK (weighted)
+// CONSOLIDATED RISK
 // ─────────────────────────────────────────────
 function getConsolidatedRisk(pairs) {
-  var totalLiq=0, rugCount=0, weightedSum=0, totalWeight=0;
-  var pairStatuses=[], allFlags=[];
-
-  pairs.forEach(function(p,i) {
-    var liq  =(p.liquidity&&p.liquidity.usd)||0;
-    var vol  =(p.volume&&p.volume.h24)||0;
-    var buys =(p.txns&&p.txns.h24&&p.txns.h24.buys)||0;
+  var totalLiq=0,rugCount=0,weightedSum=0,totalWeight=0;
+  var pairStatuses=[],allFlags=[];
+  pairs.forEach(function(p){
+    var liq=(p.liquidity&&p.liquidity.usd)||0;
+    var vol=(p.volume&&p.volume.h24)||0;
+    var buys=(p.txns&&p.txns.h24&&p.txns.h24.buys)||0;
     var sells=(p.txns&&p.txns.h24&&p.txns.h24.sells)||0;
-    var fdv  =p.fdv||0, mkt=p.marketCap||0;
-    var pc24 =p.priceChange&&p.priceChange.h24;
-    var liqB =(p.liquidity&&p.liquidity.base)||0;
-    var liqQ =(p.liquidity&&p.liquidity.quote)||0;
+    var fdv=p.fdv||0,mkt=p.marketCap||0;
+    var pc24=p.priceChange&&p.priceChange.h24;
+    var liqB=(p.liquidity&&p.liquidity.base)||0;
+    var liqQ=(p.liquidity&&p.liquidity.quote)||0;
     totalLiq+=liq;
     var result=getScoreAndFlags(liq,vol,buys,sells,fdv,mkt,p.pairCreatedAt,pc24,liqB,liqQ);
-    var score=normalizeScore(result.rawScore);
+    var score=normalizeScore(result.rawScore,result.flags);
     var sc=scoreToScenario(score);
     var weight=sc.level==='RUG'?3:sc.level==='CRIT'?2:1;
     weightedSum+=score*weight; totalWeight+=weight;
     if(sc.level==='RUG') rugCount++;
-    // Collect unique flag keys across all pools for consolidated view
     result.flags.forEach(function(f){
-      if(f.key!=='OK' && allFlags.indexOf(f.key)<0) allFlags.push(f.key);
+      if(f.key!=='OK'&&allFlags.indexOf(f.key)<0) allFlags.push(f.key);
     });
     pairStatuses.push({dex:p.dexId||'—',pairAddr:p.pairAddress||'',liq:liq,level:sc.level,color:sc.color,label:sc.label,score:score,flags:result.flags});
   });
-
-  var total=pairs.length, activeCount=total-rugCount;
-  var consolidatedScore,sc,label,actionTitle,actionDesc;
-
+  var total=pairs.length,activeCount=total-rugCount;
+  var consolidatedScore,finalLevel,finalColor,label,actionTitle,actionDesc;
   if(rugCount===total){
-    consolidatedScore=100; sc=scoreToScenario(100);
+    consolidatedScore=100; finalLevel='RUG'; finalColor='#E24B4A';
     label='Rug Pull Confirmado';
     actionTitle='NÃO confirme a possibilidade de venda ao cliente.';
     actionDesc='Todas as '+total+' pools tiveram liquidez removida.';
   } else {
     consolidatedScore=Math.min(99,Math.round(weightedSum/totalWeight));
-    sc=scoreToScenario(consolidatedScore);
+    // Apply same floor logic to consolidated
+    var floor=0;
+    allFlags.forEach(function(k){
+      if(k==='RUG') return;
+      var def=FLAG_DEFS[k]; if(def){ var lf=LEVEL_FLOOR[def.level]||0; if(lf>floor) floor=lf; }
+    });
+    consolidatedScore=Math.max(consolidatedScore,floor);
+    var sc=scoreToScenario(consolidatedScore);
+    finalLevel=rugCount>0?'HIGH':sc.level;
+    finalColor=rugCount>0?'#EF9F27':sc.color;
     if(rugCount>0){
       label='Rug Pull em '+rugCount+' Pool'+(rugCount>1?'s':'')+' · '+activeCount+' ainda ativa'+(activeCount>1?'s':'');
       actionTitle='Atenção: parte da liquidez foi removida.';
       actionDesc=rugCount+' de '+total+' pools com liquidez removida. '+activeCount+' pool'+(activeCount>1?' ainda estão ativas':' ainda está ativa')+' — verifique cada pool nas abas abaixo.';
     } else {
-      label=sc.label; actionTitle=sc.action; actionDesc=sc.actionDesc;
+      label=sc.label; actionTitle=sc.label; actionDesc=sc.label;
     }
   }
-
-  return {totalLiq,rugCount,totalPairs:total,activeCount,level:rugCount===total?'RUG':sc.level,color:rugCount===total?'#E24B4A':sc.color,score:consolidatedScore,label,actionTitle,actionDesc,pairStatuses,allFlags};
+  return {totalLiq,rugCount,totalPairs:total,activeCount,level:finalLevel,color:finalColor,score:consolidatedScore,label,actionTitle,actionDesc,pairStatuses,allFlags};
 }
 
 // ─────────────────────────────────────────────
 // SUPPLY
 // ─────────────────────────────────────────────
 function renderSupply(fdv,mkt) {
-  var diff=fdv-mkt, pctOut=fdv>0?(diff/fdv)*100:0;
+  var diff=fdv-mkt,pctOut=fdv>0?(diff/fdv)*100:0;
   var isEqual=Math.abs(pctOut)<1;
   var color=isEqual?'#1D9E75':pctOut<20?'#1D9E75':pctOut<50?'#EF9F27':'#E24B4A';
   var label=isEqual?'100% do supply em circulação — nenhum token bloqueado'
@@ -517,8 +498,8 @@ function renderSupply(fdv,mkt) {
     +'</div>';
 }
 
-function statCard(label,val,color,alertClass) {
-  return '<div class="stat'+(alertClass?' '+alertClass:'')+'"><div class="stat-label">'+label+'</div><div class="stat-value" style="color:'+(color||'#e0e0e0')+'">'+val+'</div></div>';
+function statCard(l,v,c,a){
+  return '<div class="stat'+(a?' '+a:'')+'"><div class="stat-label">'+l+'</div><div class="stat-value" style="color:'+(c||'#e0e0e0')+'">'+v+'</div></div>';
 }
 
 // ─────────────────────────────────────────────
@@ -526,17 +507,12 @@ function statCard(label,val,color,alertClass) {
 // ─────────────────────────────────────────────
 function renderConsolidatedCard(risk,tokenAddr,tokenName,tokenSym,dexUrl) {
   var color=risk.color;
-
-  // Critical points strip — unique flags across all pools
-  var criticalPoints = risk.allFlags.map(function(key) {
+  var critHtml=risk.allFlags.map(function(key){
     var fs=FLAG_STYLE[key]||FLAG_STYLE.OK;
-    var short=FLAG_SHORT[key]||key;
     return '<div class="critical-point" style="background:'+fs.bg+';border-color:'+fs.border+'">'
       +'<div class="critical-point-dot" style="background:'+fs.color+'"></div>'
-      +'<span style="color:'+fs.color+'">'+short+'</span>'
-      +'</div>';
+      +'<span style="color:'+fs.color+'">'+(FLAG_SHORT[key]||key)+'</span></div>';
   }).join('');
-
   var poolRows=risk.pairStatuses.map(function(ps,i){
     return '<div class="pool-status-row">'
       +'<div class="pool-dot" style="background:'+ps.color+'"></div>'
@@ -545,29 +521,23 @@ function renderConsolidatedCard(risk,tokenAddr,tokenName,tokenSym,dexUrl) {
       +'<span style="color:'+ps.color+';margin-left:auto">'+fmt(ps.liq)+' · '+ps.label+'</span>'
       +'</div>';
   }).join('');
-
   return '<div class="consolidated-card" style="background:'+color+'0d;border-color:'+color+'55">'
     +'<div class="consolidated-top">'
     +'<div class="consolidated-left">'
     +'<div class="consolidated-label" style="color:'+color+'">Diagnóstico Consolidado · '+risk.totalPairs+' pool'+(risk.totalPairs>1?'s encontradas':' encontrada')+'</div>'
     +'<div class="consolidated-title" style="color:'+color+'">'+risk.label+'</div>'
-    +'<div class="consolidated-desc" style="color:'+color+'cc">'+risk.actionTitle+'</div>'
-    +'<div style="font-size:12px;color:'+color+'99;margin-top:4px;line-height:1.5">'+risk.actionDesc+'</div>'
+    +(risk.rugCount>0?'<div class="consolidated-desc" style="color:'+color+'cc">'+risk.actionDesc+'</div>':'')
     +'</div>'
     +'<div class="score-ring">'+scoreRing(risk.score,color)+'<div class="score-lbl">Risk Score</div></div>'
     +'</div>'
-    // Stats
     +'<div class="consolidated-stats">'
     +'<div><div class="consolidated-stat-label">Liquidez total</div><div class="consolidated-stat-value" style="color:'+color+'">'+fmt(risk.totalLiq)+'</div></div>'
     +'<div><div class="consolidated-stat-label">Pools analisadas</div><div class="consolidated-stat-value">'+risk.totalPairs+'</div></div>'
     +(risk.rugCount>0?'<div><div class="consolidated-stat-label">Pools com rug</div><div class="consolidated-stat-value" style="color:#E24B4A">'+risk.rugCount+'</div></div>':'')
     +(risk.activeCount>0&&risk.rugCount>0?'<div><div class="consolidated-stat-label">Pools ativas</div><div class="consolidated-stat-value" style="color:#1D9E75">'+risk.activeCount+'</div></div>':'')
     +'</div>'
-    // Critical points
-    +(risk.allFlags.length>0?'<div style="font-size:10px;color:#444;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Pontos críticos detectados</div><div class="critical-points">'+criticalPoints+'</div>':'')
-    // Pool rows
+    +(risk.allFlags.length>0?'<div style="font-size:10px;color:#444;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Pontos críticos detectados</div><div class="critical-points">'+critHtml+'</div>':'')
     +'<div class="pool-status-list">'+poolRows+'</div>'
-    // Token strip
     +'<div class="token-strip">'
     +'<div><div class="token-strip-name">'+tokenName+' · '+tokenSym+'</div><div class="token-strip-addr">'+tokenAddr+'</div></div>'
     +'<div class="token-strip-links">'
@@ -582,102 +552,64 @@ function renderConsolidatedCard(risk,tokenAddr,tokenName,tokenSym,dexUrl) {
 // CONCLUSION TAB
 // ─────────────────────────────────────────────
 var VERDICT_DEFS = {
-  PUMP_DUMP: {
-    icon:'📉',
-    label:'Possível Pump & Dump',
-    color:'#E24B4A', bg:'#200808', border:'#5a1515',
-    text:'O token apresenta padrão clássico de pump & dump: alta atividade inicial seguida de queda severa e volume quase zerado. O projeto possivelmente foi criado para valorização artificial e venda coordenada pelos criadores. O cliente provavelmente comprou durante ou após o pico.'
-  },
-  DEAD: {
-    icon:'💀',
-    label:'Token Morto',
-    color:'#EF9F27', bg:'#1f1208', border:'#5a3010',
-    text:'O token não apresenta atividade de mercado relevante. Com menos de $500 em volume e poucas transações, a liquidez disponível é insuficiente para qualquer venda que não colapse o preço. O token existe na blockchain mas é comercialmente inativo.'
-  },
-  RUG: {
-    icon:'🚨',
-    label:'Rug Pull Detectado',
-    color:'#E24B4A', bg:'#200808', border:'#5a1515',
-    text:'Uma ou mais pools tiveram liquidez removida. O token pode ainda existir na carteira do cliente mas a venda não é possível nas pools afetadas. Oriente o cliente que isso não é uma limitação da OKX — é o estado atual do token na blockchain.'
-  },
-  DUMP: {
-    icon:'📉',
-    label:'Dump em Andamento',
-    color:'#E24B4A', bg:'#200808', border:'#5a1515',
-    text:'Queda superior a 90% nas últimas 24h indica venda coordenada em curso. O valor que o cliente vê na carteira pode ser significativamente diferente do que conseguirá resgatar ao vender.'
-  },
-  SELL: {
-    icon:'⚠️',
-    label:'Pressão Vendedora Anormal',
-    color:'#EF9F27', bg:'#1f1208', border:'#5a3010',
-    text:'A maioria das transações são vendas, indicando que os holders estão saindo do token. Isso pode preceder uma queda adicional de preço. Oriente o cliente sobre o risco de executar a venda neste momento.'
-  },
-  VOL: {
-    icon:'🔄',
-    label:'Possível Wash Trading',
-    color:'#EF9F27', bg:'#1f1208', border:'#5a3010',
-    text:'O volume de negociação é desproporcional à liquidez disponível, o que pode indicar transações artificiais entre carteiras do mesmo criador para simular interesse no token. Isso é uma prática conhecida como wash trading.'
-  },
-  FDV_LIQ: {
-    icon:'💸',
-    label:'Valor Irreal vs Liquidez',
-    color:'#EF9F27', bg:'#1f1208', border:'#5a3010',
-    text:'O valor teórico do token (FDV) é extremamente desproporcional à liquidez real disponível. Isso significa que o preço exibido não reflete o valor real que o cliente obteria ao vender — a execução da venda colapsaria o preço.'
-  },
-  LIQ_MCAP: {
-    icon:'⚡',
-    label:'Liquidez Insuficiente para MCAP',
-    color:'#EF9F27', bg:'#1f1208', border:'#5a3010',
-    text:'A liquidez disponível representa menos de 1% do Market Cap do token. Qualquer ordem de venda com volume médio vai mover o preço drasticamente antes de ser executada completamente.'
-  },
-  SPREAD: {
-    icon:'🪣',
-    label:'Pool Desequilibrada',
-    color:'#EF9F27', bg:'#1f1208', border:'#5a3010',
-    text:'O pool contém quase exclusivamente tokens e muito pouco SOL como contraparte. Isso significa que não há liquidez suficiente para absorver vendas — o preço colapsaria imediatamente.'
-  },
-  NEAR_ZERO: {
-    icon:'🔻',
-    label:'Valor Próximo de Zero',
-    color:'#7F77DD', bg:'#10102a', border:'#303070',
-    text:'O Market Cap do token é inferior a $100, indicando que o token praticamente não tem valor de mercado. Oriente o cliente que o valor recuperável da venda pode ser irrisório ou nulo na prática.'
-  },
+  PUMP_DUMP:{icon:'📉',label:'Possível Pump & Dump',color:'#E24B4A',bg:'#200808',border:'#5a1515',text:'O token apresenta padrão clássico de pump & dump: alta atividade inicial seguida de queda severa e volume quase zerado. O projeto possivelmente foi criado para valorização artificial e venda coordenada pelos criadores.'},
+  DEAD:     {icon:'💀',label:'Token Morto',color:'#EF9F27',bg:'#1f1208',border:'#5a3010',text:'O token não apresenta atividade de mercado relevante. Com menos de $500 em volume e poucas transações, a liquidez disponível é insuficiente para qualquer venda que não colapse o preço.'},
+  RUG:      {icon:'🚨',label:'Rug Pull Detectado',color:'#E24B4A',bg:'#200808',border:'#5a1515',text:'Uma ou mais pools tiveram liquidez removida. O token pode ainda existir na carteira do cliente mas a venda não é possível nas pools afetadas.'},
+  DUMP:     {icon:'📉',label:'Dump em Andamento',color:'#E24B4A',bg:'#200808',border:'#5a1515',text:'Queda superior a 90% nas últimas 24h indica venda coordenada em curso. O valor que o cliente vê na carteira pode ser significativamente diferente do que conseguirá resgatar ao vender.'},
+  SELL:     {icon:'⚠️',label:'Pressão Vendedora Anormal',color:'#EF9F27',bg:'#1f1208',border:'#5a3010',text:'A maioria das transações são vendas, indicando que os holders estão saindo do token. Isso pode preceder uma queda adicional de preço.'},
+  VOL:      {icon:'🔄',label:'Possível Wash Trading',color:'#EF9F27',bg:'#1f1208',border:'#5a3010',text:'O volume de negociação é desproporcional à liquidez disponível, o que pode indicar transações artificiais entre carteiras do mesmo criador para simular interesse no token.'},
+  FDV_LIQ:  {icon:'💸',label:'Valor Irreal vs Liquidez',color:'#EF9F27',bg:'#1f1208',border:'#5a3010',text:'O valor teórico do token (FDV) é extremamente desproporcional à liquidez real. O preço exibido não reflete o valor real que o cliente obteria ao vender.'},
+  LIQ_MCAP: {icon:'⚡',label:'Liquidez Insuficiente para MCAP',color:'#EF9F27',bg:'#1f1208',border:'#5a3010',text:'A liquidez disponível representa menos de 1% do Market Cap. Qualquer ordem de venda com volume médio vai mover o preço drasticamente.'},
+  SPREAD:   {icon:'🪣',label:'Pool Desequilibrada',color:'#EF9F27',bg:'#1f1208',border:'#5a3010',text:'O pool contém quase exclusivamente tokens e muito pouco SOL. Não há liquidez suficiente para absorver vendas sem colapsar o preço imediatamente.'},
+  NEAR_ZERO:{icon:'🔻',label:'Valor Próximo de Zero',color:'#7F77DD',bg:'#10102a',border:'#303070',text:'O Market Cap do token é inferior a $100. O valor recuperável da venda pode ser irrisório ou nulo na prática.'},
 };
 
-function buildConclusion(risk, tokenName, tokenSym) {
-  // Determine which verdicts to show based on flags across all pools
-  var shownVerdicts = [];
-  var flagSet = risk.allFlags;
+// "What to tell the client" based on consolidated scenario
+function buildClientGuidance(risk) {
+  var color = risk.color;
+  var flags = risk.allFlags;
+  var title, text;
 
-  // Priority order for verdicts
-  var verdictOrder = ['RUG','PUMP_DUMP','DEAD','DUMP','SELL','VOL','FDV_LIQ','LIQ_MCAP','SPREAD','NEAR_ZERO'];
-  verdictOrder.forEach(function(key) {
-    if (flagSet.indexOf(key) >= 0 && VERDICT_DEFS[key]) {
-      shownVerdicts.push(key);
-    }
-  });
-
-  // If rug detected from rugCount
-  if (risk.rugCount > 0 && shownVerdicts.indexOf('RUG') < 0) {
-    shownVerdicts.unshift('RUG');
-  }
-
-  // Build summary text
-  var summaryParts = [];
   if (risk.rugCount === risk.totalPairs) {
-    summaryParts.push('Todas as '+risk.totalPairs+' pools tiveram liquidez removida. O cliente não conseguirá vender em nenhuma plataforma descentralizada.');
+    title = 'Informe ao cliente que a venda não é possível no momento.';
+    text = 'Todas as pools deste token tiveram a liquidez removida. O token ainda aparece na carteira do cliente, mas não pode ser vendido em nenhuma exchange descentralizada. Isso não é uma limitação da OKX — é o estado atual do token na blockchain. Oriente o cliente com empatia e explique que o valor não é recuperável neste momento.';
   } else if (risk.rugCount > 0) {
-    summaryParts.push(risk.rugCount+' de '+risk.totalPairs+' pools tiveram liquidez removida. Ainda há '+risk.activeCount+' pool'+(risk.activeCount>1?' ativas':' ativa')+', mas com risco elevado.');
+    title = 'Venda parcialmente possível — oriente com cautela.';
+    text = risk.rugCount+' de '+risk.totalPairs+' pools tiveram liquidez removida. Ainda há '+risk.activeCount+' pool'+(risk.activeCount>1?' ativas':' ativa')+', mas com risco elevado. Informe ao cliente que a venda pode ser tentada na pool ativa, porém com risco de slippage severo e possível perda significativa de valor. Não garanta o resultado.';
+  } else if (flags.indexOf('PUMP_DUMP')>=0 || flags.indexOf('DEAD')>=0) {
+    title = 'Oriente o cliente sobre o valor real do token.';
+    text = 'O token apresenta sinais de inatividade severa'+(flags.indexOf('PUMP_DUMP')>=0?' e histórico de pump & dump':'')+'. A venda tecnicamente pode ser tentada, mas o valor obtido provavelmente será muito inferior ao exibido na carteira. Informe o cliente sobre essa realidade antes de prosseguir, para que ele tome uma decisão informada.';
+  } else if (risk.score >= 75) {
+    title = 'Não confirme a venda. Sinais críticos detectados.';
+    text = 'Este token apresenta múltiplos sinais de risco crítico. A venda pode não ser executável ou resultar em perda severa. Verifique manualmente as pools no DexScreener e Solscan antes de orientar o cliente. Não garanta qualquer valor de resgate.';
+  } else if (risk.score >= 46) {
+    title = 'Oriente o cliente sobre os riscos antes de prosseguir.';
+    text = 'Há sinais de risco neste token. A venda pode ser possível, mas o cliente deve estar ciente de que o valor obtido pode ser significativamente inferior ao exibido. Recomende que o cliente avalie se deseja prosseguir com a venda nessas condições.';
+  } else if (risk.score >= 21) {
+    title = 'Informe o cliente sobre os pontos de atenção detectados.';
+    text = 'Foram identificados alguns sinais de atenção, mas nada crítico. A venda provavelmente é possível. Informe o cliente sobre os pontos detectados e prossiga normalmente se ele confirmar que deseja vender.';
+  } else {
+    title = 'Nenhum sinal crítico. Prossiga normalmente.';
+    text = 'Os dados automáticos não indicam fraude ou risco elevado. A venda provavelmente pode ser realizada normalmente. Recomenda-se verificação manual das authorities no Solscan para confirmação final.';
   }
-  if (flagSet.indexOf('PUMP_DUMP') >= 0) summaryParts.push('Padrão de pump & dump identificado: queda histórica severa com volume atual próximo de zero.');
-  if (flagSet.indexOf('DEAD') >= 0) summaryParts.push('Token comercialmente inativo com menos de $500 em volume nas últimas 24h.');
-  if (flagSet.indexOf('VOL') >= 0) summaryParts.push('Volume desproporcional à liquidez sugere possível wash trading.');
-  if (flagSet.indexOf('DUMP') >= 0 && flagSet.indexOf('PUMP_DUMP') < 0) summaryParts.push('Dump em andamento: queda superior a 90% nas últimas 24h.');
-  if (summaryParts.length === 0) summaryParts.push('Nenhum padrão crítico específico identificado. Monitorar os pontos de atenção detectados.');
 
-  var verdictsHtml = shownVerdicts.length > 0
-    ? shownVerdicts.map(function(key) {
-        var vd = VERDICT_DEFS[key];
+  return '<div class="client-box" style="background:'+color+'0d;border-color:'+color+'55">'
+    +'<div class="client-box-label" style="color:'+color+'">O que dizer ao cliente</div>'
+    +'<div class="client-box-title" style="color:'+color+'">'+title+'</div>'
+    +'<div class="client-box-text">'+text+'</div>'
+    +'</div>';
+}
+
+function buildConclusion(risk,tokenName,tokenSym) {
+  var flags=risk.allFlags;
+  var verdictOrder=['RUG','PUMP_DUMP','DEAD','DUMP','SELL','VOL','FDV_LIQ','LIQ_MCAP','SPREAD','NEAR_ZERO'];
+  var shownVerdicts=[];
+  verdictOrder.forEach(function(key){ if(flags.indexOf(key)>=0&&VERDICT_DEFS[key]) shownVerdicts.push(key); });
+  if(risk.rugCount>0&&shownVerdicts.indexOf('RUG')<0) shownVerdicts.unshift('RUG');
+
+  var verdictsHtml=shownVerdicts.length>0
+    ? shownVerdicts.map(function(key){
+        var vd=VERDICT_DEFS[key];
         return '<div class="concl-verdict" style="background:'+vd.bg+';border-color:'+vd.border+'">'
           +'<div class="concl-verdict-icon">'+vd.icon+'</div>'
           +'<div><div class="concl-verdict-label" style="color:'+vd.color+'">'+vd.label+'</div>'
@@ -687,31 +619,29 @@ function buildConclusion(risk, tokenName, tokenSym) {
     : '<div class="concl-verdict" style="background:#081a12;border-color:#1a4530">'
       +'<div class="concl-verdict-icon">✅</div>'
       +'<div><div class="concl-verdict-label" style="color:#1D9E75">Sem padrões críticos</div>'
-      +'<div class="concl-verdict-text">Nenhum padrão de fraude ou manipulação identificado nos dados disponíveis. Análise manual recomendada para confirmação.</div></div>'
+      +'<div class="concl-verdict-text">Nenhum padrão de fraude ou manipulação identificado nos dados disponíveis.</div></div>'
       +'</div>';
-
-  var summaryText = summaryParts.join(' ');
 
   return '<div style="padding-top:4px">'
     +'<div class="concl-header">'
     +'<div class="concl-icon">🔍</div>'
     +'<div><div class="concl-title">Conclusão da Análise</div>'
-    +'<div class="concl-sub">'+tokenName+' · '+tokenSym+' · Risk Score Consolidado: '+risk.score+'/100</div></div>'
+    +'<div class="concl-sub">'+tokenName+' · '+tokenSym+' · Risk Score: '+risk.score+'/100</div></div>'
     +'</div>'
+    // "What to tell the client" box
+    +buildClientGuidance(risk)
+    // Verdicts
     +'<div class="concl-verdicts">'+verdictsHtml+'</div>'
-    +'<div class="concl-summary">'
-    +'<div class="concl-summary-title">Resumo para o agente</div>'
-    +'<div class="concl-summary-text">'+summaryText+'</div>'
-    +'</div>'
+    // Copy button
     +'<button class="concl-copy-btn" id="conclusionCopyBtn" onclick="copyConclusionNote()">Copiar conclusão para internal note</button>'
     +'</div>';
 }
 
 function copyConclusionNote() {
-  if (!currentToken) return;
-  var risk = currentToken.risk;
-  var lines = [
-    '=== Conclusão · Rug Pull Detector v5.4 ===',
+  if(!currentToken) return;
+  var risk=currentToken.risk;
+  var lines=[
+    '=== Conclusão · Rug Pull Detector v5.5 ===',
     'Token: '+currentToken.name+' ('+currentToken.symbol+')',
     'Contract: '+currentToken.address,
     'Analisado em: '+(analysisTime?analysisTime.toLocaleString('pt-BR'):''),
@@ -719,25 +649,23 @@ function copyConclusionNote() {
     'Diagnóstico: '+risk.label,
     '',
     'Pontos críticos: '+(risk.allFlags.length>0?risk.allFlags.map(function(k){return FLAG_SHORT[k]||k;}).join(', '):'Nenhum'),
-    '',
     'Pools analisadas: '+risk.totalPairs,
   ];
-  if (risk.rugCount>0) lines.push('Pools com rug pull: '+risk.rugCount);
+  if(risk.rugCount>0) lines.push('Pools com rug pull: '+risk.rugCount);
   lines.push('Liquidez total: '+fmt(risk.totalLiq));
   risk.pairStatuses.forEach(function(ps,i){
     lines.push('Pool '+(i+1)+' ('+ps.dex+'): '+fmt(ps.liq)+' · '+ps.label+' · Score '+ps.score);
   });
-  var text = lines.join('\n');
-  navigator.clipboard.writeText(text).then(function() {
-    var btn = document.getElementById('conclusionCopyBtn');
-    if (btn) { btn.textContent='✓ Copiado!'; btn.classList.add('copied'); setTimeout(function(){ btn.textContent='Copiar conclusão para internal note'; btn.classList.remove('copied'); },2500); }
+  navigator.clipboard.writeText(lines.join('\n')).then(function(){
+    var btn=document.getElementById('conclusionCopyBtn');
+    if(btn){btn.textContent='✓ Copiado!';btn.classList.add('copied');setTimeout(function(){btn.textContent='Copiar conclusão para internal note';btn.classList.remove('copied');},2500);}
   });
 }
 
 // ─────────────────────────────────────────────
 // PAIR TABS
 // ─────────────────────────────────────────────
-function tabClass(level) {
+function tabClass(level){
   if(level==='RUG')  return 'tab-rug';
   if(level==='CRIT') return 'tab-crit';
   if(level==='HIGH') return 'tab-high';
@@ -745,19 +673,19 @@ function tabClass(level) {
   return '';
 }
 
-function renderPairTabs(pairs, risk, tokenAddr, tokenName, tokenSym) {
-  var tabs='', contents='';
-  pairs.forEach(function(p,i) {
-    var liq  =(p.liquidity&&p.liquidity.usd)||0;
-    var vol  =(p.volume&&p.volume.h24)||0;
-    var buys =(p.txns&&p.txns.h24&&p.txns.h24.buys)||0;
+function renderPairTabs(pairs,risk,tokenAddr,tokenName,tokenSym) {
+  var tabs='',contents='';
+  pairs.forEach(function(p,i){
+    var liq=(p.liquidity&&p.liquidity.usd)||0;
+    var vol=(p.volume&&p.volume.h24)||0;
+    var buys=(p.txns&&p.txns.h24&&p.txns.h24.buys)||0;
     var sells=(p.txns&&p.txns.h24&&p.txns.h24.sells)||0;
-    var fdv  =p.fdv||0, mkt=p.marketCap||0;
-    var pc24 =p.priceChange&&p.priceChange.h24;
-    var liqB =(p.liquidity&&p.liquidity.base)||0;
-    var liqQ =(p.liquidity&&p.liquidity.quote)||0;
+    var fdv=p.fdv||0,mkt=p.marketCap||0;
+    var pc24=p.priceChange&&p.priceChange.h24;
+    var liqB=(p.liquidity&&p.liquidity.base)||0;
+    var liqQ=(p.liquidity&&p.liquidity.quote)||0;
     var result=getScoreAndFlags(liq,vol,buys,sells,fdv,mkt,p.pairCreatedAt,pc24,liqB,liqQ);
-    var score=normalizeScore(result.rawScore);
+    var score=normalizeScore(result.rawScore,result.flags);
     var sc=scoreToScenario(score);
     tabs+='<div class="pair-tab '+tabClass(sc.level)+(i===0?' active':'')+'" onclick="switchTab('+i+')" id="tab-btn-'+i+'">'
       +'<div class="pair-tab-dot" style="background:'+sc.color+'"></div>'
@@ -765,15 +693,14 @@ function renderPairTabs(pairs, risk, tokenAddr, tokenName, tokenSym) {
     contents+='<div class="pair-tab-content'+(i===0?' active':'')+'" id="tab-content-'+i+'">'
       +renderPairContent(p,result.flags,sc,score,tokenAddr,i)+'</div>';
   });
-  // Conclusion tab (always last)
-  var conclusionTabIdx = pairs.length;
-  tabs+='<div class="pair-tab tab-concl" onclick="switchTab('+conclusionTabIdx+')" id="tab-btn-'+conclusionTabIdx+'">🔍 Conclusão</div>';
-  contents+='<div class="pair-tab-content" id="tab-content-'+conclusionTabIdx+'">'+buildConclusion(risk, tokenName, tokenSym)+'</div>';
-
+  // Conclusion tab — always last
+  var ci=pairs.length;
+  tabs+='<div class="pair-tab tab-concl" onclick="switchTab('+ci+')" id="tab-btn-'+ci+'">🔍 Conclusão</div>';
+  contents+='<div class="pair-tab-content" id="tab-content-'+ci+'">'+buildConclusion(risk,tokenName,tokenSym)+'</div>';
   return '<div class="pair-tabs-wrap"><div class="pair-tabs-header">'+tabs+'</div>'+contents+'</div>';
 }
 
-function switchTab(idx) {
+function switchTab(idx){
   document.querySelectorAll('.pair-tab').forEach(function(t){t.classList.remove('active');});
   document.querySelectorAll('.pair-tab-content').forEach(function(t){t.classList.remove('active');});
   var btn=document.getElementById('tab-btn-'+idx);
@@ -782,19 +709,19 @@ function switchTab(idx) {
   if(content) content.classList.add('active');
 }
 
-function renderPairContent(p, flags, sc, score, tokenAddr, idx) {
-  var liq  =(p.liquidity&&p.liquidity.usd)||0;
-  var vol  =(p.volume&&p.volume.h24)||0;
-  var buys =(p.txns&&p.txns.h24&&p.txns.h24.buys)||0;
+function renderPairContent(p,flags,sc,score,tokenAddr,idx){
+  var liq=(p.liquidity&&p.liquidity.usd)||0;
+  var vol=(p.volume&&p.volume.h24)||0;
+  var buys=(p.txns&&p.txns.h24&&p.txns.h24.buys)||0;
   var sells=(p.txns&&p.txns.h24&&p.txns.h24.sells)||0;
-  var liqQ =(p.liquidity&&p.liquidity.quote)||0;
-  var liqB =(p.liquidity&&p.liquidity.base)||0;
-  var fdv  =p.fdv||0, mkt=p.marketCap||0;
-  var sym  =(p.baseToken&&p.baseToken.symbol)||'—';
-  var name =(p.baseToken&&p.baseToken.name)||'—';
-  var pc   =p.priceChange||{};
-  var total=buys+sells, buyPct=total>0?Math.round((buys/total)*100):0;
-  var age  =ageDays(p.pairCreatedAt);
+  var liqQ=(p.liquidity&&p.liquidity.quote)||0;
+  var liqB=(p.liquidity&&p.liquidity.base)||0;
+  var fdv=p.fdv||0,mkt=p.marketCap||0;
+  var sym=(p.baseToken&&p.baseToken.symbol)||'—';
+  var name=(p.baseToken&&p.baseToken.name)||'—';
+  var pc=p.priceChange||{};
+  var total=buys+sells,buyPct=total>0?Math.round((buys/total)*100):0;
+  var age=ageDays(p.pairCreatedAt);
   var ageAlert=age<1?'alert-red':age<7?'alert-yellow':'';
   var liqColor=liq<5?'#E24B4A':liq<5000?'#EF9F27':'#1D9E75';
   var liqBarW=Math.min(100,(liq/100000)*100);
@@ -804,12 +731,7 @@ function renderPairContent(p, flags, sc, score, tokenAddr, idx) {
   var solscanPoolUrl='https://solscan.io/account/'+pairAddr+'#defiactivities';
   var html='';
 
-  html+='<div class="action-box" style="background:'+sc.color+'11;border-color:'+sc.color+'">'
-    +'<div class="action-label" style="color:'+sc.color+'">O QUE FAZER NESTE POOL</div>'
-    +'<div class="action-title" style="color:'+sc.color+'">'+sc.action+'</div>'
-    +'<div class="action-desc" style="color:'+sc.color+'cc">'+sc.actionDesc+'</div>'
-    +'</div>';
-
+  // Diag box (no action box above it)
   html+='<div class="diag-box" style="border:1.5px solid '+sc.color+';box-shadow:0 0 20px '+sc.color+'33">'
     +'<div class="diag-header"><div>'
     +'<div class="diag-label">Pool '+(idx+1)+' · '+(p.dexId||'—')+' · '+time+'</div>'
@@ -827,6 +749,7 @@ function renderPairContent(p, flags, sc, score, tokenAddr, idx) {
     +'</div></div>'
     +'</div>';
 
+  // Liquidity
   html+='<div class="card"><div class="card-title">Liquidez (Pool '+(idx+1)+')</div>'
     +'<div class="grid3">'
     +'<div class="stat'+(isRug?' alert-red':'')+'"><div class="stat-label">Total (USD)</div><div class="liq-big" style="color:'+liqColor+'">'+fmt(liq)+'</div><div class="bar-wrap"><div class="bar-fill" style="width:'+liqBarW+'%;background:'+liqColor+'"></div></div></div>'
@@ -834,10 +757,8 @@ function renderPairContent(p, flags, sc, score, tokenAddr, idx) {
     +'<div class="stat"><div class="stat-label">Pooled '+sym+'</div><div class="stat-value">'+Number(liqB).toLocaleString()+'</div></div>'
     +'</div>'
     +'<div class="liq-disclaimer">⚠ Valor fornecido pelo DexScreener — pode ter delay. Para o valor atual, <a href="https://solscan.io/account/'+pairAddr+'" target="_blank">verifique o pool no Solscan ↗</a></div>';
-
-  if (isRug && pairAddr) {
-    html+='<div class="rug-confirm-hint">'
-      +'<strong>Liquidez extremamente baixa — possível rug pull.</strong> Para confirmar:<ol>'
+  if(isRug&&pairAddr){
+    html+='<div class="rug-confirm-hint"><strong>Liquidez extremamente baixa — possível rug pull.</strong> Para confirmar:<ol>'
       +'<li><a class="rug-confirm-link" href="'+solscanPoolUrl+'" target="_blank">Abrir transações deste pool no Solscan ↗</a></li>'
       +'<li>Clicar em <strong>Action</strong> e selecionar apenas <strong>Remove Liquidity</strong></li>'
       +'<li>Sem transação → liquidez ainda presente (baixa, mas não removida)</li>'
@@ -846,28 +767,23 @@ function renderPairContent(p, flags, sc, score, tokenAddr, idx) {
   }
   html+='</div>';
 
+  // Volume + Price
   html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">'
     +'<div class="card" style="margin-bottom:0"><div class="card-title">Volume e Negociações (24h)</div>'
     +'<div class="grid2">'
-    +statCard('Volume',fmt(vol))
-    +statCard('Transações',(buys+sells).toLocaleString())
-    +statCard('Compras',buys.toLocaleString(),'#1D9E75')
-    +statCard('Vendas',sells.toLocaleString(),'#E24B4A')
+    +statCard('Volume',fmt(vol))+statCard('Transações',(buys+sells).toLocaleString())
+    +statCard('Compras',buys.toLocaleString(),'#1D9E75')+statCard('Vendas',sells.toLocaleString(),'#E24B4A')
     +'</div>'
     +'<div class="buysell-wrap"><div class="buysell-labels"><span style="color:#1D9E75">Compras '+buyPct+'%</span><span style="color:#E24B4A">Vendas '+(100-buyPct)+'%</span></div><div class="buysell-bar"><div class="buysell-fill" style="width:'+buyPct+'%"></div></div></div>'
     +'</div>'
     +'<div class="card" style="margin-bottom:0"><div class="card-title">Preço e Variação</div>'
     +'<div style="font-size:18px;font-weight:500;color:#e0e0e0;margin-bottom:10px">$'+(p.priceUsd||'0')+'</div>'
-    +'<div class="grid2">'
-    +statCard('5m',pct(pc.m5),pctColor(pc.m5))
-    +statCard('1h',pct(pc.h1),pctColor(pc.h1))
-    +statCard('6h',pct(pc.h6),pctColor(pc.h6))
-    +statCard('24h',pct(pc.h24),pctColor(pc.h24))
-    +'</div></div></div>';
+    +'<div class="grid2">'+statCard('5m',pct(pc.m5),pctColor(pc.m5))+statCard('1h',pct(pc.h1),pctColor(pc.h1))+statCard('6h',pct(pc.h6),pctColor(pc.h6))+statCard('24h',pct(pc.h24),pctColor(pc.h24))+'</div>'
+    +'</div></div>';
 
+  // Market cap
   html+='<div class="card"><div class="card-title">Market Cap</div><div class="grid4">'
-    +statCard('Market Cap',fmt(mkt))
-    +statCard('FDV',fmt(fdv))
+    +statCard('Market Cap',fmt(mkt))+statCard('FDV',fmt(fdv))
     +statCard('Par criado',timeAgo(p.pairCreatedAt),age<1?'#E24B4A':age<7?'#EF9F27':'#e0e0e0',ageAlert)
     +statCard('DEX',p.dexId||'—')
     +'</div>'
@@ -880,36 +796,33 @@ function renderPairContent(p, flags, sc, score, tokenAddr, idx) {
 // ─────────────────────────────────────────────
 // COPY POOL NOTE
 // ─────────────────────────────────────────────
-function copyResume(idx) {
+function copyResume(idx){
   var p=allPairsData[idx]; if(!p) return;
-  var liq=(p.liquidity&&p.liquidity.usd)||0, vol=(p.volume&&p.volume.h24)||0;
-  var mkt=p.marketCap||0, fdv=p.fdv||0;
-  var sym=(p.baseToken&&p.baseToken.symbol)||'—', name=(p.baseToken&&p.baseToken.name)||'—';
+  var liq=(p.liquidity&&p.liquidity.usd)||0,vol=(p.volume&&p.volume.h24)||0;
+  var mkt=p.marketCap||0,fdv=p.fdv||0;
+  var sym=(p.baseToken&&p.baseToken.symbol)||'—',name=(p.baseToken&&p.baseToken.name)||'—';
   var addr=(p.baseToken&&p.baseToken.address)||currentAddress;
-  var buys=(p.txns&&p.txns.h24&&p.txns.h24.buys)||0, sells=(p.txns&&p.txns.h24&&p.txns.h24.sells)||0;
+  var buys=(p.txns&&p.txns.h24&&p.txns.h24.buys)||0,sells=(p.txns&&p.txns.h24&&p.txns.h24.sells)||0;
   var pc24=p.priceChange&&p.priceChange.h24;
-  var liqB=(p.liquidity&&p.liquidity.base)||0, liqQ=(p.liquidity&&p.liquidity.quote)||0;
+  var liqB=(p.liquidity&&p.liquidity.base)||0,liqQ=(p.liquidity&&p.liquidity.quote)||0;
   var result=getScoreAndFlags(liq,vol,buys,sells,fdv,mkt,p.pairCreatedAt,pc24,liqB,liqQ);
-  var score=normalizeScore(result.rawScore), sc=scoreToScenario(score);
+  var score=normalizeScore(result.rawScore,result.flags),sc=scoreToScenario(score);
   var risk=getConsolidatedRisk(allPairsData);
   var flagText=result.flags.map(function(f){return '• ['+f.key+'] '+f.agent;}).join('\n');
   var text=[
-    '=== Rug Pull Detector v5.4 ===',
+    '=== Rug Pull Detector v5.5 ===',
     'Analisado em: '+(analysisTime?analysisTime.toLocaleString('pt-BR'):''),
-    'Token: '+name+' ('+sym+')', 'Contract: '+addr,'',
+    'Token: '+name+' ('+sym+')','Contract: '+addr,'',
     '-- VISÃO CONSOLIDADA --',
-    'Total de pools: '+risk.totalPairs,
-    'Pools com rug pull: '+risk.rugCount,
+    'Total de pools: '+risk.totalPairs,'Pools com rug: '+risk.rugCount,
     'Liquidez total: '+fmt(risk.totalLiq),
-    'Risk Score Consolidado: '+risk.score+'/100',
-    'Diagnóstico: '+risk.label,
+    'Risk Score Consolidado: '+risk.score+'/100','Diagnóstico: '+risk.label,
     'Pontos críticos: '+(risk.allFlags.length>0?risk.allFlags.map(function(k){return FLAG_SHORT[k]||k;}).join(', '):'Nenhum'),
-    '',
-    '-- POOL '+(idx+1)+' · '+(p.dexId||'—')+' --',
-    'Risk Score: '+score+'/100', 'Diagnóstico: '+sc.label,
-    'Liquidez: '+fmt(liq), 'Volume 24h: '+fmt(vol),
-    'Market Cap: '+fmt(mkt), 'FDV: '+fmt(fdv), 'Preço: $'+(p.priceUsd||'0'),'',
-    'Flags:', flagText, '==============================='
+    '','-- POOL '+(idx+1)+' · '+(p.dexId||'—')+' --',
+    'Risk Score: '+score+'/100','Diagnóstico: '+sc.label,
+    'Liquidez: '+fmt(liq),'Volume 24h: '+fmt(vol),
+    'Market Cap: '+fmt(mkt),'FDV: '+fmt(fdv),'Preço: $'+(p.priceUsd||'0'),'',
+    'Flags:',flagText,'==============================='
   ].join('\n');
   navigator.clipboard.writeText(text).then(function(){
     var btn=document.getElementById('copyBtn-'+idx);
@@ -920,10 +833,10 @@ function copyResume(idx) {
 // ─────────────────────────────────────────────
 // NOT FOUND
 // ─────────────────────────────────────────────
-function renderNotFound(addr) {
+function renderNotFound(addr){
   document.getElementById('result').innerHTML='<div class="not-found-box">'
     +'<div class="not-found-title">⚠ Token não encontrado no DexScreener</div>'
-    +'<div class="not-found-msg">Este token não possui pares ativos em nenhuma exchange descentralizada conhecida. Isso pode indicar que a liquidez foi removida (rug pull) ou que o token ainda não foi listado em nenhuma DEX.</div>'
+    +'<div class="not-found-msg">Este token não possui pares ativos em nenhuma exchange descentralizada conhecida. Isso pode indicar que a liquidez foi removida ou que o token ainda não foi listado em nenhuma DEX.</div>'
     +'<div class="steps-box"><div class="steps-title">O que fazer agora</div>'
     +'<div class="step"><div class="step-num">1</div><div><div class="step-title">Confirme o endereço com o cliente</div><div class="step-desc">Um endereço Solana válido tem entre 32 e 44 caracteres alfanuméricos.</div></div></div>'
     +'<div class="step"><div class="step-num">2</div><div><div class="step-title">Verifique na OKX Web3</div><div class="step-desc">O token pode existir na blockchain mas sem pares ativos.</div></div></div>'
@@ -939,12 +852,12 @@ function renderNotFound(addr) {
 // ─────────────────────────────────────────────
 // MAIN RENDER
 // ─────────────────────────────────────────────
-function renderAllPairs(pairs, addr) {
+function renderAllPairs(pairs,addr){
   allPairsData=pairs;
   var sym=(pairs[0].baseToken&&pairs[0].baseToken.symbol)||'—';
   var name=(pairs[0].baseToken&&pairs[0].baseToken.name)||'—';
   var tokenAddr=(pairs[0].baseToken&&pairs[0].baseToken.address)||addr;
-  var fdv=pairs[0].fdv||0, mkt=pairs[0].marketCap||0;
+  var fdv=pairs[0].fdv||0,mkt=pairs[0].marketCap||0;
   var dexUrl=pairs[0].url||'#';
   addToHistory(tokenAddr,name,sym);
   var risk=getConsolidatedRisk(pairs);
@@ -961,26 +874,26 @@ function renderAllPairs(pairs, addr) {
 // ─────────────────────────────────────────────
 function reanalyze(){if(currentAddress){document.getElementById('addressInput').value=currentAddress;analyze();}}
 
-function analyze() {
+function analyze(){
   var q=document.getElementById('addressInput').value.trim();
-  var errEl=document.getElementById('inputError'), inputEl=document.getElementById('addressInput');
-  errEl.style.display='none'; inputEl.classList.remove('error');
+  var errEl=document.getElementById('inputError'),inputEl=document.getElementById('addressInput');
+  errEl.style.display='none';inputEl.classList.remove('error');
   if(!q) return;
   if(!isValidSolanaAddress(q)){
     errEl.textContent='Endereço inválido. Um endereço Solana válido tem entre 32 e 44 caracteres alfanuméricos.';
-    errEl.style.display='block'; inputEl.classList.add('error'); return;
+    errEl.style.display='block';inputEl.classList.add('error');return;
   }
   currentAddress=q;
   var btn=document.getElementById('analyzeBtn');
-  btn.disabled=true; btn.textContent='Analisando...';
-  currentToken=null; allPairsData=[];
+  btn.disabled=true;btn.textContent='Analisando...';
+  currentToken=null;allPairsData=[];
   document.getElementById('result').innerHTML='<div class="loading"><div class="spinner"></div>Buscando dados na blockchain...</div>';
   fetch(PROXY_BASE+'/api/proxy?address='+q)
-    .then(function(r){if(!r.ok) throw new Error('HTTP '+r.status); return r.json();})
+    .then(function(r){if(!r.ok) throw new Error('HTTP '+r.status);return r.json();})
     .then(function(data){
       var pairs=Array.isArray(data)?data:[];
       if(pairs.length===0){renderNotFound(q);return;}
-      pairs.sort(function(a,b){return ((b.liquidity&&b.liquidity.usd)||0)-((a.liquidity&&a.liquidity.usd)||0);});
+      pairs.sort(function(a,b){return((b.liquidity&&b.liquidity.usd)||0)-((a.liquidity&&a.liquidity.usd)||0);});
       analysisTime=new Date();
       renderAllPairs(pairs,q);
     })
