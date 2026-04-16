@@ -307,13 +307,26 @@ var FLAG_DEFS={
   LIQ_MCAP: {weight:15,level:'HIGH'},
   FDV_LIQ:  {weight:20,level:'HIGH'},
   NEAR_ZERO:{weight:10,level:'MED'},
-  SPREAD:    {weight:15,level:'HIGH'},
-  MAKERS:    {weight:20,level:'HIGH'},
-  STAGNANT:  {weight:15,level:'MOD'},  // active token but very low activity for age
-  ABANDONED: {weight:18,level:'MOD'},  // very old token with near-zero activity
+  SPREAD:      {weight:15,level:'HIGH'},
+  MAKERS:      {weight:20,level:'HIGH'},
+  STAGNANT:    {weight:15,level:'MOD'},
+  ABANDONED:   {weight:18,level:'MOD'},
+  VOL_MOD:     {weight:12,level:'MOD'},   // volume 7–10x liquidez
+  VOL_LOW:     {weight:7, level:'MED'},   // volume 4–7x liquidez
+  LOW_ACTIVITY:{weight:7, level:'MED'},   // vol/liq ratio baixo para a idade
 };
-var MAX_RAW=326;
+var MAX_RAW=360;
 var LEVEL_FLOOR={HIGH:55,MOD:35,MED:21,OK:0};
+
+// Volume/liquidity ratio thresholds by age
+// Returns { low: atenção threshold, mod: risco moderado threshold } (percentages)
+function getVolRatioThresholds(age){
+  if(age < 7)   return {low:0,  mod:0 };
+  if(age < 30)  return {low:10, mod:3 };
+  if(age < 90)  return {low:20, mod:8 };
+  if(age < 180) return {low:30, mod:15};
+  return               {low:40, mod:20};
+}
 
 function getScoreAndFlags(liq,vol,buys,sells,fdv,mkt,pairCreatedAt,pc24,liqBase,liqQuote,makers,ctx){
   var flags=[],rawScore=0;
@@ -358,9 +371,39 @@ function getScoreAndFlags(liq,vol,buys,sells,fdv,mkt,pairCreatedAt,pc24,liqBase,
     }
   }
 
-  // VOLUME DESPROPORCIONAL — only flag if not clearly explained by large token activity
-  if(vol>liq*10 && !(isHighLiq && liq>50000)){
-    add('VOL','Volume desproporcional à liquidez — possíveis transações artificiais para simular atividade.','Volume 24h ('+fmt(vol)+') é '+Math.round(vol/liq)+'x maior que a liquidez.');
+  // VOLUME ALTO — 3 níveis proporcionais
+  // Suprimido em pools de tokens de alta liquidez com liq > $50K (arbitragem normal)
+  var volRatio = liq > 0 ? vol / liq : 0;
+  if(!(isHighLiq && liq > 50000)){
+    if(volRatio > 10){
+      add('VOL',    'Volume desproporcional à liquidez — possíveis transações artificiais para simular atividade.',    'Volume 24h ('+fmt(vol)+') é '+volRatio.toFixed(1)+'x maior que a liquidez.');
+    } else if(volRatio > 7){
+      add('VOL_MOD','Volume elevado em relação à liquidez — pode indicar atividade artificial ou interesse especulativo intenso.',    'Volume 24h ('+fmt(vol)+') é '+volRatio.toFixed(1)+'x maior que a liquidez.');
+    } else if(volRatio > 4){
+      add('VOL_LOW','Volume moderadamente alto em relação à liquidez. Vale monitorar a estabilidade do preço.',    'Volume 24h ('+fmt(vol)+') é '+volRatio.toFixed(1)+'x maior que a liquidez.');
+    }
+  }
+
+  // VOLUME BAIXO PROPORCIONAL — escala por idade
+  // Quanto mais velho o token, mais volume relativo se espera
+  // Suprimido em tokens de alta/média liquidez total
+  if(!isHighLiq && liq > 0 && age >= 7){
+    var volPct = (vol / liq) * 100;
+    var thresholds = getVolRatioThresholds(age);
+    var alreadyFlagged = flags.some(function(f){
+      return f.key==='DEAD'||f.key==='STAGNANT'||f.key==='ABANDONED'||f.key==='PUMP_DUMP';
+    });
+    if(!alreadyFlagged){
+      if(volPct < thresholds.mod){
+        add('STAGNANT',
+          'Volume muito baixo para a idade do token: '+volPct.toFixed(1)+'% da liquidez nas últimas 24h (esperado ≥ '+thresholds.low+'% para um token com '+Math.floor(age)+' dias). Projeto possivelmente inativo ou sem interesse de mercado.',
+          'Vol/Liq 24h: '+volPct.toFixed(1)+'% · Idade: '+Math.floor(age)+' dias.');
+      } else if(volPct < thresholds.low){
+        add('LOW_ACTIVITY',
+          'Volume relativamente baixo para a idade do token: '+volPct.toFixed(1)+'% da liquidez nas últimas 24h (esperado ≥ '+thresholds.low+'% para um token com '+Math.floor(age)+' dias). Atividade abaixo do esperado.',
+          'Vol/Liq 24h: '+volPct.toFixed(1)+'% · Idade: '+Math.floor(age)+' dias.');
+      }
+    }
   }
 
   // IDADE
@@ -382,21 +425,17 @@ function getScoreAndFlags(liq,vol,buys,sells,fdv,mkt,pairCreatedAt,pc24,liqBase,
   // SUPPLY
   if(fdv>0&&mkt>0&&Math.abs(fdv-mkt)/fdv<0.01) add('SUPPLY','100% do supply já está em circulação. O criador pode vender qualquer quantidade sem restrições.','FDV igual ao Market Cap.');
 
-  // TOKEN MORTO — volume zerado ou quase, pool inativa
-  if(vol<500&&age>7&&total<50&&!isHighLiq&&!isMedLiq) add('DEAD','Volume extremamente baixo para um token com mais de 7 dias. Pool praticamente inativa.','Volume 24h de apenas '+fmt(vol)+' com '+total+' transações.');
-
-  // TOKEN ESTAGNADO — ativo há algum tempo mas com atividade muito baixa para a idade
-  // Cobre casos como: 300 dias, $844 volume, 13 transações
-  if(!isHighLiq&&!isMedLiq&&age>30&&vol<1000&&total<20&&flags.every(function(f){return f.key!=='DEAD';})){
-    add('STAGNANT',
-      'Token com '+Math.floor(age)+' dias de existência e apenas '+total+' transações nas últimas 24h. Atividade muito baixa para a idade do token — projeto possivelmente abandonado ou sem interesse de mercado.',
-      'Idade: '+Math.floor(age)+' dias · Volume 24h: '+fmt(vol)+' · Transações: '+total+'.');
+  // TOKEN MORTO — volume zerado ou quase, independente do ratio
+  if(vol<500&&age>7&&total<50&&!isHighLiq&&!isMedLiq){
+    add('DEAD','Volume extremamente baixo para um token com mais de 7 dias. Pool praticamente inativa.','Volume 24h de apenas '+fmt(vol)+' com '+total+' transações.');
   }
 
-  // TOKEN ABANDONADO — muito antigo, atividade quase inexistente
-  if(!isHighLiq&&age>90&&total<10&&flags.every(function(f){return f.key!=='DEAD'&&f.key!=='STAGNANT';})){
+  // TOKEN ABANDONADO — edge case: muito antigo, quase sem transações, não coberto pelo ratio
+  if(!isHighLiq&&age>90&&total<10&&flags.every(function(f){
+    return f.key!=='DEAD'&&f.key!=='STAGNANT'&&f.key!=='LOW_ACTIVITY';
+  })){
     add('ABANDONED',
-      'Token com '+Math.floor(age)+' dias de existência e apenas '+total+' transação'+(total===1?'':'ões')+' nas últimas 24h. Projeto aparentemente abandonado — a venda é tecnicamente possível mas com baixíssima demanda de mercado.',
+      'Token com '+Math.floor(age)+' dias de existência e apenas '+total+' transação'+(total===1?'':'ões')+' nas últimas 24h. Projeto aparentemente abandonado — a venda é tecnicamente possível mas com baixíssima demanda.',
       'Idade: '+Math.floor(age)+' dias · Transações 24h: '+total+'.');
   }
 
@@ -468,10 +507,13 @@ var FLAG_STYLE={
   FDV_LIQ:  {color:'#EF9F27',bg:'#1f1208',border:'#5a3010',label:'Alto Risco'},
   NEAR_ZERO:{color:'#7F77DD',bg:'#10102a',border:'#303070',label:'Atenção'},
   SPREAD:   {color:'#EF9F27',bg:'#1f1208',border:'#5a3010',label:'Alto Risco'},
-  MAKERS:   {color:'#EF9F27',bg:'#1f1208',border:'#5a3010',label:'Atividade Suspeita'},
-  STAGNANT: {color:'#E8A838',bg:'#1a1208',border:'#4a3010',label:'Token Estagnado'},
-  ABANDONED:{color:'#E8A838',bg:'#1a1208',border:'#4a3010',label:'Projeto Abandonado'},
-  OK:       {color:'#1D9E75',bg:'#081a12',border:'#1a4530',label:'OK'},
+  MAKERS:      {color:'#EF9F27',bg:'#1f1208',border:'#5a3010',label:'Atividade Suspeita'},
+  STAGNANT:    {color:'#E8A838',bg:'#1a1208',border:'#4a3010',label:'Token Estagnado'},
+  ABANDONED:   {color:'#E8A838',bg:'#1a1208',border:'#4a3010',label:'Projeto Abandonado'},
+  VOL_MOD:     {color:'#E8A838',bg:'#1a1208',border:'#4a3010',label:'Volume Elevado'},
+  VOL_LOW:     {color:'#7F77DD',bg:'#10102a',border:'#303070',label:'Volume Alto'},
+  LOW_ACTIVITY:{color:'#7F77DD',bg:'#10102a',border:'#303070',label:'Atividade Baixa'},
+  OK:          {color:'#1D9E75',bg:'#081a12',border:'#1a4530',label:'OK'},
 };
 
 var FLAG_SHORT={
@@ -482,7 +524,9 @@ var FLAG_SHORT={
   DEAD:'Token sem volume',PUMP_DUMP:'Pump & Dump',LIQ_MCAP:'Liq. < 1% MCAP',
   FDV_LIQ:'FDV > 1000x liquidez',NEAR_ZERO:'Valor próximo de zero',
   SPREAD:'Pool sem SOL',MAKERS:'Atividade concentrada',
-  STAGNANT:'Token estagnado',ABANDONED:'Projeto abandonado',OK:'Sem alertas'
+  STAGNANT:'Token estagnado',ABANDONED:'Projeto abandonado',
+  VOL_MOD:'Volume elevado (7x+)',VOL_LOW:'Volume alto (4x+)',LOW_ACTIVITY:'Atividade baixa p/ idade',
+  OK:'Sem alertas'
 };
 
 function renderFlags(flags){
@@ -744,6 +788,34 @@ function buildConclusion(risk){
     conclusionText='Volume desproporcional gerado por um número muito pequeno de traders únicos. Padrão consistente com wash trading — atividade artificial entre carteiras do mesmo operador.';
     clientLabel='Atenção · Possível wash trading'; clientColor='#EF9F27';
     clientText='Informe ao cliente que a atividade do token pode ser artificial. O volume exibido não reflete interesse real de mercado, o que pode dificultar a execução de uma venda a preço justo.';
+  }
+
+  // ── Scenario 10: Wash trading
+  else if(flags.indexOf('MAKERS')>=0 && flags.indexOf('VOL')>=0){
+    conclusionText='Volume desproporcional gerado por um número muito pequeno de traders únicos. Padrão consistente com wash trading — atividade artificial entre carteiras do mesmo operador.';
+    clientLabel='Atenção · Possível wash trading'; clientColor='#EF9F27';
+    clientText='Informe ao cliente que a atividade do token pode ser artificial. O volume exibido não reflete interesse real de mercado, o que pode dificultar a execução de uma venda a preço justo.';
+  }
+
+  // ── Scenario: Volume moderadamente elevado (7–10x)
+  else if(flags.indexOf('VOL_MOD')>=0){
+    conclusionText='Volume elevado em relação à liquidez disponível. Pode indicar interesse especulativo intenso ou atividade artificial. A venda é possível mas o preço pode ser instável.';
+    clientLabel='Risco Moderado · Volume elevado'; clientColor='#E8A838';
+    clientText='Informe ao cliente que o token apresenta volume elevado em relação à liquidez. A venda pode ser executada, mas o preço está sujeito a variações significativas. Não confirme um valor específico de resgate.';
+  }
+
+  // ── Scenario: Volume alto (4–7x)
+  else if(flags.indexOf('VOL_LOW')>=0){
+    conclusionText='Volume relativamente alto em relação à liquidez. Vale monitorar a estabilidade do preço antes de orientar o cliente sobre o valor esperado na venda.';
+    clientLabel='Atenção · Volume alto para a liquidez'; clientColor='#7F77DD';
+    clientText='Oriente o cliente que o volume está acima do esperado para a liquidez disponível. A venda provavelmente é possível, mas o preço obtido pode variar do exibido na carteira.';
+  }
+
+  // ── Scenario: Low activity for age
+  else if(flags.indexOf('LOW_ACTIVITY')>=0){
+    conclusionText='Atividade abaixo do esperado para a idade do token. O projeto existe há bastante tempo mas apresenta volume baixo em relação à liquidez disponível — pode indicar perda de interesse da comunidade.';
+    clientLabel='Atenção · Atividade baixa para a idade'; clientColor='#7F77DD';
+    clientText='Informe ao cliente que o token tem baixa atividade de mercado para sua idade. A venda é tecnicamente possível, mas o mercado tem pouca profundidade — o valor obtido pode variar do exibido.';
   }
 
   // ── Scenario 11: New token + pump
