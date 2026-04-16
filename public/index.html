@@ -75,6 +75,9 @@
   .pool-row-link { color: #555; font-family: monospace; font-size: 10px; text-decoration: underline; text-decoration-color: #2a3040; }
   .pool-row-link:hover { color: #888; }
 
+  /* CONTEXT BADGE */
+  .context-note { font-size:10px; color:#378ADD; background:#378ADD11; border:0.5px solid #378ADD33; border-radius:4px; padding:2px 6px; white-space:nowrap; flex-shrink:0; }
+
   /* CONTEXT BADGE — shown on secondary pools of healthy tokens */
   .context-note { font-size: 10px; color: #378ADD; background: #378ADD11; border: 0.5px solid #378ADD33; border-radius: 4px; padding: 2px 6px; white-space: nowrap; flex-shrink: 0; }
 
@@ -123,6 +126,12 @@
 
   /* SECONDARY POOL NOTICE */
   .secondary-pool-notice { background: #0a1a2a; border: 0.5px solid #378ADD33; border-radius: 8px; padding: 10px 14px; margin-bottom: 12px; font-size: 11px; color: #378ADD; line-height: 1.6; }
+
+  /* EXPAND POOLS BUTTON */
+  .expand-pools-btn { width:100%; padding:8px; border-radius:8px; border:0.5px solid #1e2530; background:#060a10; color:#555; font-size:11px; cursor:pointer; margin-top:4px; }
+  .expand-pools-btn:hover { color:#999; border-color:#2a3040; }
+  .pool-rows-extra { display:none; }
+  .pool-rows-extra.expanded { display:flex; flex-direction:column; gap:6px; }
 
   .flags { display: flex; flex-direction: column; gap: 5px; }
   .flag-item { display: flex; gap: 8px; align-items: flex-start; border-radius: 7px; padding: 8px 12px; }
@@ -512,13 +521,31 @@ function getConsolidatedRisk(pairs){
     label='Possível Fraude · Rug Pull Confirmado';
   } else {
     consolidatedScore=totalWeight>0?Math.min(99,Math.round(weightedSum/totalWeight)):0;
-    // Apply floor only for non-secondary critical flags
+
+    // Apply floor only from flags that appear on PRIMARY pools
+    // For high-liq tokens, cap floor at MED (45) so secondary pool issues never push consolidated to HIGH
     var floor=0;
+    var floorCap = isHighLiqToken ? 45 : 999;
     allFlags.forEach(function(k){
-      if(k==='RUG'||k==='LIQ_SEC') return; // don't let secondary pool flags set floor
-      var def=FLAG_DEFS[k];if(def){var lf=LEVEL_FLOOR[def.level]||0;if(lf>floor) floor=lf;}
+      if(k==='RUG'||k==='LIQ_SEC') return;
+      // Only raise floor if this flag appears on at least one non-secondary pool
+      var onPrimary = pairStatuses.some(function(ps){
+        return !ps.isSecondary && ps.flags.some(function(f){return f.key===k;});
+      });
+      if(!onPrimary && isHighLiqToken) return;
+      var def=FLAG_DEFS[k];
+      if(def){var lf=Math.min(LEVEL_FLOOR[def.level]||0,floorCap);if(lf>floor) floor=lf;}
     });
     consolidatedScore=Math.max(consolidatedScore,floor);
+
+    // High-liq token with healthy primary pools: hard cap at Atenção (45)
+    if(isHighLiqToken && rugCount===0){
+      var top2healthy=pairStatuses.slice(0,2).every(function(ps){
+        return ps.level.level==='OK'||ps.level.level==='MED';
+      });
+      if(top2healthy) consolidatedScore=Math.min(consolidatedScore,45);
+    }
+
     finalLevel=scoreToLevel(consolidatedScore);
     if(rugCount>0){
       label='Rug Pull em '+rugCount+' Pool'+(rugCount>1?'s':'')+' · '+activeCount+' ainda ativa'+(activeCount>1?'s':'');
@@ -600,19 +627,27 @@ function buildConclusion(risk){
     clientText='Informe ao cliente que a venda não é possível no momento. Isso não é uma limitação da OKX — é o estado atual do token na blockchain. Oriente com empatia que o valor não é recuperável nas condições atuais.';
   }
 
-  // ── Scenario 2: High liquidity token — pools saudáveis existem, algumas secundárias com flags
+  // ── Scenario 2: High liquidity token — healthy primary pools
   else if(isHighLiq && hasGoodPools && rugCount===0 && risk.score < 46){
-    var goodPoolDesc = risk.recommendedPools.map(function(ps){ return ps.dex+' ('+fmt(ps.liq)+')'; }).join(', ');
-    conclusionText='Token com liquidez total de '+fmt(risk.totalLiq)+' distribuída em '+total+' pools. As pools menores apresentam flags individuais mas isso é esperado — o token possui pools principais bem estabelecidas com liquidez significativa ('+goodPoolDesc+'). A venda é viável nas pools recomendadas.';
+    var top5 = risk.pairStatuses.slice(0,5);
+    var top5Liq = top5.reduce(function(s,ps){ return s+ps.liq; },0);
+    var top5Pct = risk.totalLiq>0?((top5Liq/risk.totalLiq)*100).toFixed(1):'—';
+    var goodPoolDesc = risk.recommendedPools.slice(0,3).map(function(ps){ return ps.dex+' ('+fmt(ps.liq)+')'; }).join(', ');
+    conclusionText='As 5 principais pools concentram '+fmt(top5Liq)+' de '+fmt(risk.totalLiq)+' da liquidez total ('+top5Pct+'%). '
+      +'Pools secundárias podem não ter liquidez suficiente para execução de vendas — oriente o cliente a utilizar as pools principais: '+goodPoolDesc+'.';
     clientLabel='Token saudável · Oriente sobre a pool correta'; clientColor='#1D9E75';
-    clientText='O token possui liquidez suficiente para venda. Oriente o cliente a utilizar as pools principais: '+goodPoolDesc+'. Se o cliente estiver tentando vender em uma pool específica com pouca liquidez, instrua-o a trocar para uma das pools recomendadas.';
+    clientText='O token possui liquidez suficiente para venda. Se o cliente estiver tentando vender em uma pool secundária com pouca liquidez, instrua-o a utilizar as pools recomendadas: '+goodPoolDesc+'.';
   }
 
   // ── Scenario 3: High liquidity token with some concerning flags
   else if(isHighLiq && hasGoodPools && risk.score < 75){
-    conclusionText='Token com liquidez total de '+fmt(risk.totalLiq)+'. Algumas pools secundárias apresentam sinais de atenção, mas existem pools principais com boa liquidez disponíveis para venda.';
+    var top5b = risk.pairStatuses.slice(0,5);
+    var top5Liqb = top5b.reduce(function(s,ps){ return s+ps.liq; },0);
+    var top5Pctb = risk.totalLiq>0?((top5Liqb/risk.totalLiq)*100).toFixed(1):'—';
+    conclusionText='As 5 principais pools concentram '+fmt(top5Liqb)+' de '+fmt(risk.totalLiq)+' da liquidez total ('+top5Pctb+'%). '
+      +'Algumas pools secundárias apresentam sinais de atenção, mas existem pools principais com boa liquidez disponíveis para venda.';
     clientLabel='Atenção · Oriente sobre a pool correta'; clientColor='#7F77DD';
-    clientText='A venda pode ser realizada nas pools com boa liquidez. Verifique se o cliente está tentando vender em uma pool secundária com pouca liquidez e oriente-o a utilizar as pools principais do token.';
+    clientText='A venda pode ser realizada nas pools com boa liquidez. Verifique se o cliente está tentando vender em uma pool secundária e oriente-o a utilizar as pools principais do token.';
   }
 
   // ── Scenario 4: Partial rug — some pools dead, some alive
@@ -726,8 +761,8 @@ function renderConsolidatedCard(risk,tokenAddr,tokenName,tokenSym,dexUrl){
       }).join('')
     : '';
 
-  var poolRows=risk.pairStatuses.map(function(ps,i){
-    var isRecommended = risk.recommendedPools.indexOf(ps)>=0;
+  var VISIBLE_POOLS = 5;
+  var poolRowHtml = function(ps,i){
     return '<div class="pool-status-row">'
       +'<div class="pool-dot" style="background:'+ps.level.color+'"></div>'
       +'<span style="color:#888">Pool '+(i+1)+' · '+ps.dex+'</span>'
@@ -735,7 +770,22 @@ function renderConsolidatedCard(risk,tokenAddr,tokenName,tokenSym,dexUrl){
       +(ps.isSecondary?'<span class="context-note">Secundária</span>':'')
       +'<span style="color:'+ps.level.color+';margin-left:auto">'+fmt(ps.liq)+' · '+ps.level.label+'</span>'
       +'</div>';
-  }).join('');
+  };
+
+  var visiblePools = risk.pairStatuses.slice(0, VISIBLE_POOLS);
+  var extraPools   = risk.pairStatuses.slice(VISIBLE_POOLS);
+  var poolRows = '<div class="pool-status-list">'
+    + visiblePools.map(poolRowHtml).join('');
+
+  if(extraPools.length > 0){
+    poolRows += '<div class="pool-rows-extra" id="poolRowsExtra">'
+      + extraPools.map(function(ps,i){ return poolRowHtml(ps, i+VISIBLE_POOLS); }).join('')
+      + '</div>'
+      + '<button class="expand-pools-btn" id="expandPoolsBtn" onclick="toggleExtraPools()">'
+      + '↓ Ver mais '+extraPools.length+' pool'+(extraPools.length>1?'s':'')+' secundária'+(extraPools.length>1?'s':'')
+      + '</button>';
+  }
+  poolRows += '</div>';
 
   return '<div class="consolidated-card" style="background:'+color+'0d;border-color:'+color+'55">'
     +'<div class="consolidated-top">'
@@ -752,7 +802,7 @@ function renderConsolidatedCard(risk,tokenAddr,tokenName,tokenSym,dexUrl){
     +(risk.recommendedPools.length>0?'<div><div class="consolidated-stat-label">Pools recomendadas</div><div class="consolidated-stat-value" style="color:#1D9E75">'+risk.recommendedPools.length+'</div></div>':'')
     +'</div>'
     +(critHtml?'<div style="font-size:10px;color:#444;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Pontos críticos detectados</div><div class="critical-points">'+critHtml+'</div>':'')
-    +'<div class="pool-status-list">'+poolRows+'</div>'
+    +poolRows
     +buildConclusion(risk)
     +'<div class="token-strip">'
     +'<div><div class="token-strip-name">'+tokenName+' · '+tokenSym+'</div><div class="token-strip-addr">'+tokenAddr+'</div></div>'
@@ -982,6 +1032,20 @@ function renderAllPairs(pairs,addr){
   html+=renderPairTabs(pairs,risk,tokenAddr,fdv,mkt);
   document.getElementById('result').innerHTML=html;
   currentToken={name:name,symbol:sym,address:tokenAddr,risk:risk};
+}
+
+// ─────────────────────────────────────────────
+// TOGGLE EXTRA POOLS
+// ─────────────────────────────────────────────
+function toggleExtraPools(){
+  var el=document.getElementById('poolRowsExtra');
+  var btn=document.getElementById('expandPoolsBtn');
+  if(!el||!btn) return;
+  var expanded=el.classList.toggle('expanded');
+  var extra=allPairsData.length-5;
+  btn.textContent=expanded
+    ?'↑ Ocultar pools secundárias'
+    :'↓ Ver mais '+extra+' pool'+(extra>1?'s':'')+' secundária'+(extra>1?'s':'');
 }
 
 // ─────────────────────────────────────────────
