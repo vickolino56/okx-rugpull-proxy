@@ -145,6 +145,15 @@
   .supply-foot { display: flex; justify-content: space-between; font-size: 10px; color: #444; margin-top: 4px; }
   .footer { text-align: center; font-size: 10px; color: #1e2530; margin-top: 8px; }
   .liq-big { font-size: 20px; font-weight: 500; }
+
+  /* KNOWN TOKEN CARD */
+  .known-token-card { border-radius: 12px; padding: 20px 22px; margin-bottom: 12px; border: 1.5px solid; }
+  .known-token-badge { display: inline-flex; align-items: center; gap: 6px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px; padding: 4px 10px; border-radius: 20px; border: 1px solid; margin-bottom: 14px; }
+  .known-token-name { font-size: 24px; font-weight: 600; margin-bottom: 4px; }
+  .known-token-issuer { font-size: 12px; opacity: 0.7; margin-bottom: 16px; }
+  .known-token-note { font-size: 12px; color: #ccc; line-height: 1.8; background: #060a1088; border: 0.5px solid #1e2530; border-radius: 8px; padding: 12px 14px; margin-bottom: 16px; }
+  .known-token-addr { font-size: 10px; font-family: monospace; color: #555; word-break: break-all; margin-bottom: 12px; }
+  .known-token-links { display: flex; gap: 8px; flex-wrap: wrap; }
 </style>
 </head>
 <body>
@@ -178,6 +187,32 @@
 <script>
 var currentToken=null,analysisTime=null,currentAddress=null,sessionHistory=[],allPairsData=[];
 var PROXY_BASE='https://risktokenanalyzer.vercel.app';
+
+// ─────────────────────────────────────────────
+// KNOWN TOKENS WHITELIST
+// ─────────────────────────────────────────────
+var KNOWN_TOKENS={
+  'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB': {
+    name:'Tether USD', symbol:'USDT', category:'Stablecoin',
+    issuer:'Tether Limited', color:'#26A17B',
+    note:'Official USDT on Solana (SPL). Issued by Tether Limited. If the customer is reporting issues with USDT, the problem is likely unrelated to the token itself — check network, balance, and transaction history.'
+  },
+  'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v': {
+    name:'USD Coin', symbol:'USDC', category:'Stablecoin',
+    issuer:'Circle', color:'#2775CA',
+    note:'Official USDC on Solana (SPL). Issued by Circle. If the customer is reporting issues with USDC, the problem is likely unrelated to the token itself — check network, balance, and transaction history.'
+  },
+  '2u1tszSeqZ3qBWF3uNGPFc8TzMk2tdiwknnRMWGWjGWH': {
+    name:'Global Dollar', symbol:'USDG', category:'Stablecoin',
+    issuer:'Global Dollar Network', color:'#6B7CFF',
+    note:'Official USDG on Solana. USD-backed stablecoin, redeemable 1:1. If the customer is reporting issues with USDG, check network, balance, and transaction history.'
+  },
+  'So11111111111111111111111111111111111111112': {
+    name:'Wrapped SOL', symbol:'wSOL', category:'Native Token',
+    issuer:'Solana Labs', color:'#9945FF',
+    note:'Official Wrapped SOL — the SPL token representation of native SOL. Used in DeFi protocols and liquidity pools. If the customer is reporting issues, check whether they need to unwrap wSOL back to native SOL.'
+  },
+};
 
 function isValidSolanaAddress(a){return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(a);}
 function fmt(n){
@@ -944,6 +979,21 @@ function toggleExtraPools(){
   btn.textContent=expanded?'↑ Hide secondary pools':'↓ Show '+extra+' more secondary pool'+(extra>1?'s':'');
 }
 
+function renderKnownToken(addr,token){
+  var c=token.color;
+  document.getElementById('result').innerHTML='<div class="known-token-card" style="background:'+c+'0d;border-color:'+c+'55">'
+    +'<div class="known-token-badge" style="color:'+c+';border-color:'+c+'44;background:'+c+'11">✓ Official Token · '+token.category+'</div>'
+    +'<div class="known-token-name" style="color:'+c+'">'+token.name+'</div>'
+    +'<div class="known-token-issuer">Issued by '+token.issuer+'</div>'
+    +'<div class="known-token-note">'+token.note+'</div>'
+    +'<div class="known-token-addr">Contract address: '+addr+'</div>'
+    +'<div class="known-token-links">'
+    +'<a class="token-strip-link" href="https://solscan.io/token/'+addr+'" target="_blank" style="padding:7px 14px;border-radius:8px;border:0.5px solid #1e2530;color:#666;background:#060a10;font-size:12px">Solscan ↗</a>'
+    +'<a class="token-strip-link" href="https://web3.okx.com/en/token/solana/'+addr+'" target="_blank" style="padding:7px 14px;border-radius:8px;border:0.5px solid '+c+'44;color:'+c+';background:'+c+'11;font-size:12px">OKX Web3 ↗</a>'
+    +'</div>'
+    +'</div>';
+}
+
 function reanalyze(){if(currentAddress){document.getElementById('addressInput').value=currentAddress;analyze();}}
 
 function analyze(){
@@ -959,6 +1009,14 @@ function analyze(){
   var btn=document.getElementById('analyzeBtn');
   btn.disabled=true;btn.textContent='Analyzing...';
   currentToken=null;allPairsData=[];
+
+  // Check whitelist before hitting the API
+  if(KNOWN_TOKENS[q]){
+    renderKnownToken(q,KNOWN_TOKENS[q]);
+    btn.disabled=false;btn.textContent='Analyze →';
+    return;
+  }
+
   document.getElementById('result').innerHTML='<div class="loading"><div class="spinner"></div>Fetching blockchain data...</div>';
   fetch(PROXY_BASE+'/api/proxy?address='+q)
     .then(function(r){if(!r.ok) throw new Error('HTTP '+r.status);return r.json();})
