@@ -314,6 +314,7 @@ var FLAG_DEFS={
   VOL_MOD:     {weight:12,level:'MOD'},   // volume 7–10x liquidez
   VOL_LOW:     {weight:7, level:'MED'},   // volume 4–7x liquidez
   LOW_ACTIVITY:{weight:7, level:'MED'},   // vol/liq ratio baixo para a idade
+  POOL_NEW:    {weight:8, level:'MED'},   // new pool on existing token
 };
 var MAX_RAW=360;
 var LEVEL_FLOOR={HIGH:55,MOD:35,MED:21,OK:0};
@@ -406,9 +407,19 @@ function getScoreAndFlags(liq,vol,buys,sells,fdv,mkt,pairCreatedAt,pc24,liqBase,
     }
   }
 
-  // IDADE
-  if(age<1) add('AGE_HI','Token criado há menos de 24 horas. Histórico insuficiente para avaliação.','Par criado há '+timeAgo(pairCreatedAt)+'.');
-  else if(age<7) add('AGE_MED','Token com menos de 7 dias de existência. Histórico limitado.','Par criado há '+timeAgo(pairCreatedAt)+'.');
+  // IDADE DO TOKEN — usa a pool mais antiga como proxy da idade do token
+  var tokenAge = ctx && ctx.tokenAge != null ? ctx.tokenAge : age;
+  var isPoolNew = ctx && ctx.isPoolNew;
+
+  if(tokenAge<1) add('AGE_HI','Token criado há menos de 24 horas. Histórico insuficiente para avaliação.','Token criado há '+timeAgo(ctx&&ctx.oldestPairCreatedAt||pairCreatedAt)+'.');
+  else if(tokenAge<7) add('AGE_MED','Token com menos de 7 dias de existência. Histórico limitado.','Token criado há '+timeAgo(ctx&&ctx.oldestPairCreatedAt||pairCreatedAt)+'.');
+
+  // POOL NOVA EM TOKEN EXISTENTE — injeção de nova liquidez pode indicar reativação ou pump
+  if(isPoolNew){
+    add('POOL_NEW',
+      'Esta pool foi criada há menos de 24h em um token com '+Math.floor(tokenAge)+' dias de existência. Pode indicar nova injeção de liquidez, reativação do projeto ou tentativa de pump.',
+      'Pool criada há '+timeAgo(pairCreatedAt)+' · Token existe há '+Math.floor(tokenAge)+' dias.');
+  }
 
   // DUMP — always relevant
   if(pc24n!=null&&pc24n<=-90) add('DUMP','Queda de '+Math.abs(pc24n).toFixed(1)+'% nas últimas 24h — possível dump em andamento ou rug pull em curso.','Variação 24h: '+pct(pc24)+'.');
@@ -515,6 +526,7 @@ var FLAG_STYLE={
   VOL_MOD:     {color:'#E8A838',bg:'#1a1208',border:'#4a3010',label:'Volume Elevado'},
   VOL_LOW:     {color:'#7F77DD',bg:'#10102a',border:'#303070',label:'Volume Alto'},
   LOW_ACTIVITY:{color:'#7F77DD',bg:'#10102a',border:'#303070',label:'Atividade Baixa'},
+  POOL_NEW:    {color:'#7F77DD',bg:'#10102a',border:'#303070',label:'Nova Pool'},
   OK:          {color:'#1D9E75',bg:'#081a12',border:'#1a4530',label:'OK'},
 };
 
@@ -528,7 +540,7 @@ var FLAG_SHORT={
   SPREAD:'Pool sem SOL',MAKERS:'Atividade concentrada',
   STAGNANT:'Token estagnado',ABANDONED:'Projeto abandonado',
   VOL_MOD:'Volume elevado (7x+)',VOL_LOW:'Volume alto (4x+)',LOW_ACTIVITY:'Atividade baixa p/ idade',
-  OK:'Sem alertas'
+  POOL_NEW:'Nova pool criada',OK:'Sem alertas'
 };
 
 function renderFlags(flags){
@@ -546,9 +558,14 @@ function renderFlags(flags){
 // CONSOLIDATED RISK
 // ─────────────────────────────────────────────
 function getConsolidatedRisk(pairs){
-  // First pass: calculate total liquidity
+  // First pass: calculate total liquidity AND find oldest pool (proxy for token age)
   var totalLiq=0;
-  pairs.forEach(function(p){ totalLiq+=((p.liquidity&&p.liquidity.usd)||0); });
+  var oldestPairCreatedAt=null;
+  pairs.forEach(function(p){
+    totalLiq+=((p.liquidity&&p.liquidity.usd)||0);
+    var ts=p.pairCreatedAt;
+    if(ts&&(!oldestPairCreatedAt||ts<oldestPairCreatedAt)) oldestPairCreatedAt=ts;
+  });
   var isHighLiqToken = totalLiq >= HIGH_LIQ_THRESHOLD;
   var isMedLiqToken  = totalLiq >= MEDIUM_LIQ_THRESHOLD;
 
@@ -573,7 +590,14 @@ function getConsolidatedRisk(pairs){
     // and this pool holds less than 10% of it
     var isSecondaryPool = isHighLiqToken && liq < (totalLiq * 0.1) && i > 0;
 
-    var ctx={totalLiq:totalLiq,isHighLiqToken:isHighLiqToken,isMedLiqToken:isMedLiqToken,isSecondaryPool:isSecondaryPool,priceUsd:p.priceUsd||0,priceNative:p.priceNative||0};
+    // A pool is "new" if it was created recently BUT the token itself is older
+    var tokenAge = ageDays(oldestPairCreatedAt);
+    var poolAge  = ageDays(p.pairCreatedAt);
+    var isPoolNew = poolAge < 1 && tokenAge >= 1; // pool < 24h but token exists longer
+
+    var ctx={totalLiq:totalLiq,isHighLiqToken:isHighLiqToken,isMedLiqToken:isMedLiqToken,
+      isSecondaryPool:isSecondaryPool,priceUsd:p.priceUsd||0,priceNative:p.priceNative||0,
+      tokenAge:tokenAge,poolAge:poolAge,isPoolNew:isPoolNew,oldestPairCreatedAt:oldestPairCreatedAt};
     var result=getScoreAndFlags(liq,vol,buys,sells,fdv,mkt,p.pairCreatedAt,pc24,liqB,liqQ,makers,ctx);
     var score=normalizeScore(result.rawScore,result.flags);
     var lv=scoreToLevel(score);
@@ -596,18 +620,17 @@ function getConsolidatedRisk(pairs){
   var consolidatedScore,finalLevel,label;
 
   if(rugCount===total){
+    // ALL pools zeradas → true rug pull
     consolidatedScore=100; finalLevel=scoreToLevel(100);
-    label='Possível Fraude · Rug Pull Confirmado';
+    label='Rug Pull Confirmado · Liquidez Totalmente Removida';
   } else {
     consolidatedScore=totalWeight>0?Math.min(99,Math.round(weightedSum/totalWeight)):0;
 
     // Apply floor only from flags that appear on PRIMARY pools
-    // For high-liq tokens, cap floor at Atenção (34) so secondary pool issues never push consolidated to MOD+
     var floor=0;
     var floorCap = isHighLiqToken ? 34 : 999;
     allFlags.forEach(function(k){
       if(k==='RUG'||k==='LIQ_SEC') return;
-      // Only raise floor if this flag appears on at least one non-secondary pool
       var onPrimary = pairStatuses.some(function(ps){
         return !ps.isSecondary && ps.flags.some(function(f){return f.key===k;});
       });
@@ -626,8 +649,27 @@ function getConsolidatedRisk(pairs){
     }
 
     finalLevel=scoreToLevel(consolidatedScore);
+
     if(rugCount>0){
-      label='Rug Pull em '+rugCount+' Pool'+(rugCount>1?'s':'')+' · '+activeCount+' ainda ativa'+(activeCount>1?'s':'');
+      // Partial pools zeradas — label and level based on remaining liquidity
+      var zeroLabel = rugCount+' pool'+(rugCount>1?'s':'')+' com liquidez zerada · '+activeCount+' ainda ativa'+(activeCount>1?'s':'');
+      if(totalLiq>=500000){
+        // Large token with some zerada pools — just a note, not alarming
+        label=zeroLabel;
+        // Don't let zerada pools override a healthy consolidated score
+        consolidatedScore=Math.min(consolidatedScore,45);
+        finalLevel=scoreToLevel(consolidatedScore);
+      } else if(totalLiq>=100000){
+        // Medium token with zerada pools — moderate concern
+        label=zeroLabel;
+        consolidatedScore=Math.max(consolidatedScore,35);
+        finalLevel=scoreToLevel(consolidatedScore);
+      } else {
+        // Low liquidity + zerada pools — higher concern
+        label=zeroLabel;
+        consolidatedScore=Math.max(consolidatedScore,55);
+        finalLevel=scoreToLevel(consolidatedScore);
+      }
     } else {
       label=finalLevel.label;
     }
@@ -699,23 +741,24 @@ function buildConclusion(risk){
       +'</div>';
   }
 
-  // ── Scenario 1: All pools rug
+  // ── Scenario 1: All pools rug — true rug pull confirmed
   if(rugCount===total){
     conclusionText='Todas as '+total+' pools deste token tiveram a liquidez removida. O token existe na blockchain, mas não pode ser vendido em nenhuma exchange descentralizada no momento.';
     clientLabel='Não confirme a venda'; clientColor='#E24B4A';
-    clientText='Informe ao cliente que a venda não é possível no momento. Isso não é uma limitação da OKX — é o estado atual do token na blockchain. Oriente com empatia que o valor não é recuperável nas condições atuais.';
+    clientText='Informe ao cliente que a venda não é possível no momento. Isso não é uma limitação da plataforma — é o estado atual do token na blockchain. Oriente com empatia que o valor não é recuperável nas condições atuais.';
   }
 
-  // ── Scenario 2: High liquidity token — healthy primary pools
-  else if(isHighLiq && hasGoodPools && rugCount===0 && risk.score < 46){
+  // ── Scenario 2: High liquidity token — healthy primary pools (with or without zerada pools)
+  else if(isHighLiq && hasGoodPools && risk.score < 46){
     var top5 = risk.pairStatuses.slice(0,5);
     var top5Liq = top5.reduce(function(s,ps){ return s+ps.liq; },0);
     var top5Pct = risk.totalLiq>0?((top5Liq/risk.totalLiq)*100).toFixed(1):'—';
     var goodPoolDesc = risk.recommendedPools.slice(0,3).map(function(ps){ return ps.dex+' ('+fmt(ps.liq)+')'; }).join(', ');
-    conclusionText='As 5 principais pools concentram '+fmt(top5Liq)+' de '+fmt(risk.totalLiq)+' da liquidez total ('+top5Pct+'%). '
-      +'Pools secundárias podem não ter liquidez suficiente para execução de vendas — oriente o cliente a utilizar as pools principais: '+goodPoolDesc+'.';
+    var zeradaNote = rugCount>0 ? ' ('+rugCount+' pool'+(rugCount>1?'s':'')+' com liquidez zerada — sem impacto significativo na liquidez total)' : '';
+    conclusionText='As 5 principais pools concentram '+fmt(top5Liq)+' de '+fmt(risk.totalLiq)+' da liquidez total ('+top5Pct+'%)'+zeradaNote+'. '
+      +'Pools secundárias podem não ter liquidez suficiente — oriente o cliente a utilizar as pools principais: '+goodPoolDesc+'.';
     clientLabel='Token saudável · Oriente sobre a pool correta'; clientColor='#1D9E75';
-    clientText='O token possui liquidez suficiente para venda. Se o cliente estiver tentando vender em uma pool secundária com pouca liquidez, instrua-o a utilizar as pools recomendadas: '+goodPoolDesc+'.';
+    clientText='O token possui liquidez suficiente para venda. Se o cliente estiver tentando vender em uma pool secundária ou zerada, instrua-o a utilizar as pools recomendadas: '+goodPoolDesc+'.';
   }
 
   // ── Scenario 3: High liquidity token with some concerning flags
@@ -724,23 +767,24 @@ function buildConclusion(risk){
     var top5Liqb = top5b.reduce(function(s,ps){ return s+ps.liq; },0);
     var top5Pctb = risk.totalLiq>0?((top5Liqb/risk.totalLiq)*100).toFixed(1):'—';
     conclusionText='As 5 principais pools concentram '+fmt(top5Liqb)+' de '+fmt(risk.totalLiq)+' da liquidez total ('+top5Pctb+'%). '
-      +'Algumas pools secundárias apresentam sinais de atenção, mas existem pools principais com boa liquidez disponíveis para venda.';
+      +'Algumas pools apresentam sinais de atenção, mas existem pools principais com boa liquidez disponíveis para venda.';
     clientLabel='Atenção · Oriente sobre a pool correta'; clientColor='#7F77DD';
-    clientText='A venda pode ser realizada nas pools com boa liquidez. Verifique se o cliente está tentando vender em uma pool secundária e oriente-o a utilizar as pools principais do token.';
+    clientText='A venda pode ser realizada nas pools com boa liquidez. Verifique se o cliente está tentando vender em uma pool problemática e oriente-o a utilizar as pools principais do token.';
   }
 
-  // ── Scenario 4: Partial rug — some pools dead, some alive
-  else if(rugCount>0 && hasGoodPools){
-    conclusionText=rugCount+' de '+total+' pools tiveram liquidez removida. Ainda há '+risk.recommendedPools.length+' pool'+(risk.recommendedPools.length>1?'s ativas com liquidez':' ativa com liquidez')+' disponível para venda.';
-    clientLabel='Venda parcialmente possível · Oriente sobre a pool correta'; clientColor='#EF9F27';
-    clientText='Informe ao cliente que a venda é possível apenas nas pools ativas. Verifique qual pool o cliente está utilizando — se for uma pool com liquidez removida, instrua-o a tentar em uma das pools disponíveis listadas acima.';
+  // ── Scenario 4: Pools zeradas em token médio/grande — pools boas disponíveis
+  else if(rugCount>0 && hasGoodPools && risk.totalLiq>=100000){
+    var goodPoolDesc3=risk.recommendedPools.slice(0,3).map(function(ps){return ps.dex+' ('+fmt(ps.liq)+')';}).join(', ');
+    conclusionText=rugCount+' pool'+(rugCount>1?'s':'')+' com liquidez zerada, mas o token possui '+fmt(risk.totalLiq)+' de liquidez total em '+risk.activeCount+' pools ativas. A venda é viável nas pools disponíveis: '+goodPoolDesc3+'.';
+    clientLabel='Atenção · Pools zeradas detectadas'; clientColor='#7F77DD';
+    clientText='Informe ao cliente que algumas pools estão sem liquidez, mas há pools ativas disponíveis para venda. Verifique qual pool o cliente está utilizando e oriente sobre as opções disponíveis.';
   }
 
-  // ── Scenario 5: Partial rug — no good pools
+  // ── Scenario 5: Pools zeradas — sem pools boas disponíveis
   else if(rugCount>0 && !hasGoodPools){
-    conclusionText=rugCount+' de '+total+' pools tiveram liquidez removida. As pools restantes apresentam liquidez insuficiente para executar uma venda sem colapsar o preço.';
+    conclusionText=rugCount+' de '+total+' pools com liquidez zerada. As pools restantes apresentam liquidez insuficiente — a venda pode não ser executável sem grande perda de valor.';
     clientLabel='Não confirme a venda'; clientColor='#E24B4A';
-    clientText='Informe ao cliente que a venda não é possível nas condições atuais. As pools com liquidez removida são inoperantes e as restantes têm liquidez insuficiente para uma venda sem grande perda de valor.';
+    clientText='Informe ao cliente que as pools sem liquidez são inoperantes e as demais têm liquidez insuficiente. A venda não é recomendada nas condições atuais.';
   }
 
   // ── Scenario 6: Pump & Dump detected
