@@ -349,24 +349,32 @@ function getScoreAndFlags(liq,vol,buys,sells,fdv,mkt,pairCreatedAt,pc24,liqBase,
   }
 
   // LIQUIDITY FLAGS — context-aware
-  if(liq<1000){
+  // Primary pool thresholds: < $5K = Alto Risco, $5K–$20K = Risco Moderado
+  if(liq<5000){
     if(isHighLiq && isSecondary){
-      // This is a small pool on a large token — downgrade to informational
-      add('LIQ_SEC',
-        'Esta é uma pool secundária com liquidez baixa ('+fmt(liq)+'). O token possui liquidez significativa em outras pools — o cliente deve utilizar as pools principais para venda.',
-        'Pool secundária com '+fmt(liq)+' de liquidez. Token tem '+fmt(ctx.totalLiq)+' no total.');
+      // Secondary pool on large token — level based on absolute USD value
+      if(liq<1000){
+        add('LIQ_HI','Esta pool secundária tem liquidez muito baixa ('+fmt(liq)+'). Qualquer tentativa de venda neste pool resultará em grande perda de valor.','Pool secundária com liquidez de apenas '+fmt(liq)+'.');
+      } else {
+        add('LIQ_SEC',
+          'Esta é uma pool secundária com liquidez baixa ('+fmt(liq)+'). O token possui liquidez significativa em outras pools — o cliente deve utilizar as pools principais para venda.',
+          'Pool secundária com '+fmt(liq)+' de liquidez. Token tem '+fmt(ctx.totalLiq)+' no total.');
+      }
     } else if(isMedLiq && isSecondary){
       add('LIQ_MED',
         'Liquidez baixa nesta pool ('+fmt(liq)+'). Verifique as outras pools do token para encontrar melhores condições de venda.',
-        'Liquidez crítica de '+fmt(liq)+' nesta pool.');
+        'Liquidez de '+fmt(liq)+' nesta pool.');
     } else {
       add('LIQ_HI','Liquidez insuficiente para qualquer troca. A venda pode falhar ou resultar em grande perda de valor.','Liquidez crítica de '+fmt(liq)+'.');
     }
-  } else if(liq<5000){
+  } else if(liq<20000){
     if(isHighLiq && isSecondary){
-      add('LIQ_SEC',
-        'Pool secundária com liquidez limitada ('+fmt(liq)+'). O token possui pools principais com liquidez muito maior — prefira essas para execução da venda.',
-        'Pool secundária com '+fmt(liq)+'. Token total: '+fmt(ctx.totalLiq)+'.');
+      if(liq<10000){
+        add('LIQ_SEC',
+          'Pool secundária com liquidez limitada ('+fmt(liq)+'). O token possui pools principais com liquidez muito maior — prefira essas para execução da venda.',
+          'Pool secundária com '+fmt(liq)+'. Token total: '+fmt(ctx.totalLiq)+'.');
+      }
+      // $10K–$20K secondary on large token: no flag, acceptable
     } else {
       add('LIQ_MED','Liquidez baixa — o cliente pode conseguir vender mas receberá menos do que o valor exibido.','Liquidez de '+fmt(liq)+'.');
     }
@@ -726,18 +734,17 @@ function buildConclusion(risk){
   var conclusionText, clientLabel, clientColor, clientText;
   var recommendedHtml = '';
 
-  // Build recommended pools section if applicable
+  // Build recommended pool section — best pool only
   if(hasGoodPools && rugCount > 0){
+    var bestPool = risk.recommendedPools[0];
     recommendedHtml = '<div class="recommended-pools">'
-      +'<div class="recommended-pools-label">✓ Pools disponíveis para venda</div>'
-      + risk.recommendedPools.map(function(ps,i){
-          return '<div class="recommended-pool-row">'
-            +'<div class="pool-dot" style="background:#1D9E75"></div>'
-            +'<span style="color:#1D9E75">'+ps.dex+'</span>'
-            +'<span style="color:#555;font-family:monospace;font-size:10px">'+shortAddr(ps.pairAddr)+'</span>'
-            +'<span style="color:#1D9E75;margin-left:auto">'+fmt(ps.liq)+'</span>'
-            +'</div>';
-        }).join('')
+      +'<div class="recommended-pools-label">✓ Pool recomendada para venda</div>'
+      +'<div class="recommended-pool-row" style="cursor:pointer" onclick="switchTab('+risk.pairStatuses.indexOf(bestPool)+')">'
+      +'<div class="pool-dot" style="background:#1D9E75"></div>'
+      +'<span style="color:#1D9E75">'+bestPool.dex+'</span>'
+      +'<span style="color:#555;font-family:monospace;font-size:10px">'+shortAddr(bestPool.pairAddr)+'</span>'
+      +'<span style="color:#1D9E75;margin-left:auto">'+fmt(bestPool.liq)+' · Ver análise →</span>'
+      +'</div>'
       +'</div>';
   }
 
@@ -920,7 +927,14 @@ function renderConsolidatedCard(risk,tokenAddr,tokenName,tokenSym,dexUrl){
   var critHtml=critFlags.length>0
     ? critFlags.map(function(key){
         var fs=FLAG_STYLE[key]||FLAG_STYLE.OK;
-        return '<div class="critical-point" style="background:'+fs.bg+';border-color:'+fs.border+'">'
+        // Find first pool index that has this flag
+        var poolIdx=0;
+        for(var pi=0;pi<risk.pairStatuses.length;pi++){
+          if(risk.pairStatuses[pi].flags.some(function(f){return f.key===key;})){
+            poolIdx=pi; break;
+          }
+        }
+        return '<div class="critical-point" style="background:'+fs.bg+';border-color:'+fs.border+';cursor:pointer" onclick="switchTab('+poolIdx+')" title="Ver na Pool '+(poolIdx+1)+'">'
           +'<div class="critical-point-dot" style="background:'+fs.color+'"></div>'
           +'<span style="color:'+fs.color+'">'+(FLAG_SHORT[key]||key)+'</span></div>';
       }).join('')
@@ -930,7 +944,9 @@ function renderConsolidatedCard(risk,tokenAddr,tokenName,tokenSym,dexUrl){
   var poolRowHtml = function(ps,i){
     return '<div class="pool-status-row">'
       +'<div class="pool-dot" style="background:'+ps.level.color+'"></div>'
-      +'<span style="color:#888">Pool '+(i+1)+' · '+ps.dex+'</span>'
+      // Pool name — clickable to scroll to tab
+      +'<span style="color:#888;cursor:pointer;text-decoration:underline;text-decoration-color:#333" onclick="switchTab('+i+')" title="Ver análise desta pool">Pool '+(i+1)+' · '+ps.dex+'</span>'
+      // Pool address — clickable to Solscan
       +'<a class="pool-row-link" href="https://solscan.io/account/'+ps.pairAddr+'" target="_blank">'+shortAddr(ps.pairAddr)+' ↗</a>'
       +(ps.isSecondary?'<span class="context-note">Secundária</span>':'')
       +'<span style="color:'+ps.level.color+';margin-left:auto">'+fmt(ps.liq)+' · '+ps.level.label+'</span>'
@@ -1013,6 +1029,9 @@ function switchTab(idx){
   var content=document.getElementById('tab-content-'+idx);
   if(btn) btn.classList.add('active');
   if(content) content.classList.add('active');
+  // Scroll to tabs section smoothly
+  var tabsEl=document.querySelector('.pair-tabs-wrap');
+  if(tabsEl) tabsEl.scrollIntoView({behavior:'smooth',block:'start'});
 }
 
 function renderPairContent(p,flags,lv,score,tokenAddr,idx,fdv,mkt,isSecondary,risk){
