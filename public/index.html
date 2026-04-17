@@ -810,6 +810,42 @@ function buildConclusion(risk){
     }
   }
 
+  // ─── AGENT DECISION FLOW ───
+  var hasActivePools = risk.activeCount > 0 && risk.recommendedPools.length > 0;
+  var decisionFlow = '<div style="margin-top:12px;padding:12px 14px;border-radius:8px;background:#060a10;border:0.5px solid #1e2530">'
+    +'<div style="font-size:10px;color:#444;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px">Agent decision flow</div>'
+    +'<div style="display:flex;flex-direction:column;gap:8px">'
+
+    // Step 1: Active pools?
+    +'<div style="display:flex;gap:10px;align-items:flex-start">'
+    +'<div style="width:20px;height:20px;border-radius:50%;background:'+(hasActivePools?'#1D9E75':'#E24B4A')+'22;border:0.5px solid '+(hasActivePools?'#1D9E75':'#E24B4A')+';color:'+(hasActivePools?'#1D9E75':'#E24B4A')+';font-size:10px;font-weight:600;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px">1</div>'
+    +'<div><div style="font-size:11px;font-weight:600;color:#e0e0e0;margin-bottom:2px">Is there at least one active pool?'
+    +'<span style="margin-left:6px;font-size:10px;font-weight:700;color:'+(hasActivePools?'#1D9E75':'#E24B4A')+'">'+(hasActivePools?'✓ YES — '+risk.activeCount+' pool'+(risk.activeCount>1?'s':'')+' active':'✗ NO — all pools have zero liquidity')+'</span>'
+    +'</div>'
+    +'<div style="font-size:11px;color:#555;line-height:1.6">'
+    +(hasActivePools
+      ? 'Inform the client that external options may exist, but the value received may be significantly lower than displayed. <strong style="color:#888">Do not indicate any specific pool.</strong>'
+      : 'Inform the client that there is no available liquidity at this time. The token exists on the blockchain but cannot be traded on any DEX.')
+    +'</div></div></div>'
+
+    // Step 2: Confirm value?
+    +'<div style="display:flex;gap:10px;align-items:flex-start">'
+    +'<div style="width:20px;height:20px;border-radius:50%;background:#E24B4A22;border:0.5px solid #E24B4A;color:#E24B4A;font-size:10px;font-weight:600;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px">2</div>'
+    +'<div><div style="font-size:11px;font-weight:600;color:#e0e0e0;margin-bottom:2px">Confirm value or guarantee outcome?'
+    +'<span style="margin-left:6px;font-size:10px;font-weight:700;color:#E24B4A">✗ NEVER — in either case</span>'
+    +'</div>'
+    +'<div style="font-size:11px;color:#555;line-height:1.6">Do not confirm any specific sell value. Do not guarantee execution. The decision to proceed belongs to the client.</div>'
+    +'</div></div>'
+
+    // Step 3: Close
+    +'<div style="display:flex;gap:10px;align-items:flex-start">'
+    +'<div style="width:20px;height:20px;border-radius:50%;background:#7F77DD22;border:0.5px solid #7F77DD;color:#7F77DD;font-size:10px;font-weight:600;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px">3</div>'
+    +'<div><div style="font-size:11px;font-weight:600;color:#e0e0e0;margin-bottom:2px">After informing the client</div>'
+    +'<div style="font-size:11px;color:#555;line-height:1.6">Copy diagnosis to internal note → close the ticket. No escalation required unless your team has a specific fraud reporting process.</div>'
+    +'</div></div>'
+
+    +'</div></div>';
+
   return '<div class="conclusion-inline">'
     +'<div class="conclusion-inline-title">Conclusion</div>'
     +'<div class="conclusion-inline-text">'+conclusionText+'</div>'
@@ -819,6 +855,7 @@ function buildConclusion(risk){
     +'<div class="conclusion-inline-client-text" style="color:'+clientColor+'cc">'+clientText+'</div>'
     +'</div>'
     +suggestedHtml
+    +decisionFlow
     +'</div>';
 }
 
