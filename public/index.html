@@ -644,7 +644,9 @@ function buildConclusion(risk){
   var rugCount=risk.rugCount,total=risk.totalPairs,isHighLiq=risk.isHighLiqToken;
   var conclusionText,clientLabel,clientColor,clientText,recommendedHtml='';
 
-  if(hasGoodPools&&rugCount>0){
+  // Only show recommended pool when diagnosis is not Critical Risk or above
+  // Avoids ambiguity between "DO NOT CONFIRM" and a green pool suggestion on the same screen
+  if(hasGoodPools && rugCount>0 && risk.score<80){
     var bestPool=risk.recommendedPools[0];
     recommendedHtml='<div class="recommended-pools">'
       +'<div class="recommended-pools-label">✓ Recommended pool for sale</div>'
