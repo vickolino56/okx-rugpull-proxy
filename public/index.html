@@ -146,7 +146,27 @@
   .footer { text-align: center; font-size: 10px; color: #1e2530; margin-top: 8px; }
   .liq-big { font-size: 20px; font-weight: 500; }
 
-  /* KNOWN TOKEN CARD */
+  /* TOOLTIPS */
+  .tip { display:inline-flex; align-items:center; justify-content:center; width:14px; height:14px; border-radius:50%; background:#1e2530; color:#555; font-size:9px; cursor:help; margin-left:4px; flex-shrink:0; position:relative; }
+  .tip:hover { background:#2a3540; color:#999; }
+  .tip:hover::after { content:attr(data-tip); position:absolute; bottom:calc(100% + 6px); left:50%; transform:translateX(-50%); background:#0d1117; border:0.5px solid #2a3540; color:#ccc; font-size:11px; line-height:1.5; padding:8px 12px; border-radius:8px; white-space:nowrap; max-width:260px; white-space:normal; width:260px; z-index:100; pointer-events:none; font-weight:400; box-shadow:0 4px 16px #00000066; }
+
+  /* GLOSSARY */
+  .glossary-wrap { margin-top: 24px; }
+  .glossary-toggle { width:100%; padding:10px 14px; border-radius:8px; border:0.5px solid #1e2530; background:#0d1117; color:#444; font-size:11px; cursor:pointer; text-align:left; display:flex; justify-content:space-between; align-items:center; }
+  .glossary-toggle:hover { color:#777; }
+  .glossary-body { display:none; background:#0d1117; border:0.5px solid #1e2530; border-top:none; border-radius:0 0 8px 8px; padding:14px 16px; }
+  .glossary-body.open { display:block; }
+  .glossary-item { display:flex; gap:10px; padding:8px 0; border-bottom:0.5px solid #1e253044; }
+  .glossary-item:last-child { border-bottom:none; }
+  .glossary-term { font-size:11px; font-weight:600; color:#e0e0e0; min-width:120px; flex-shrink:0; }
+  .glossary-def { font-size:11px; color:#666; line-height:1.6; }
+
+  /* SUGGESTED APPROACH BLOCK */
+  .suggested-approach { margin-top:10px; padding:12px 14px; border-radius:8px; border:0.5px solid #1e2530; background:#060a10; }
+  .suggested-approach-title { font-size:10px; color:#555; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px; }
+  .suggested-approach-text { font-size:11px; color:#888; line-height:1.8; font-style:italic; }
+  .suggested-approach-note { font-size:10px; color:#444; margin-top:6px; }
   .known-token-card { border-radius: 12px; padding: 20px 22px; margin-bottom: 12px; border: 1.5px solid; }
   .known-token-badge { display: inline-flex; align-items: center; gap: 6px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px; padding: 4px 10px; border-radius: 20px; border: 1px solid; margin-bottom: 14px; }
   .known-token-name { font-size: 24px; font-weight: 600; margin-bottom: 4px; }
@@ -181,6 +201,15 @@
     </div>
   </div>
   <div id="result"></div>
+
+  <div class="glossary-wrap">
+    <button class="glossary-toggle" onclick="toggleGlossary()">
+      <span>📖 Glossary — Key Terms</span>
+      <span id="glossaryArrow" style="font-size:10px">↓</span>
+    </button>
+    <div class="glossary-body" id="glossaryBody"></div>
+  </div>
+
   <div class="footer">Token Risk Analyzer · Built by Vinicius Fernandes · Solana</div>
 </div>
 
@@ -214,7 +243,30 @@ var KNOWN_TOKENS={
   },
 };
 
-function isValidSolanaAddress(a){return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(a);}
+// ─────────────────────────────────────────────
+// GLOSSARY
+// ─────────────────────────────────────────────
+var GLOSSARY=[
+  {term:'Liquidity (Liq.)',   def:'The amount of funds available in a pool for trading. Low liquidity means large orders will significantly move the price — or fail entirely.'},
+  {term:'FDV',                def:'Fully Diluted Valuation — the theoretical total market cap if 100% of the token supply were in circulation. A very high FDV vs low liquidity means the "value" exists only on paper.'},
+  {term:'Market Cap',         def:'Current value of all tokens currently in circulation. Different from FDV when part of the supply is still locked.'},
+  {term:'Rug Pull',           def:'A type of fraud where the token creators remove all liquidity from the pool, making it impossible for holders to sell. The token still appears in wallets but has no real value.'},
+  {term:'Liquidity Pool',     def:'A smart contract holding two tokens (e.g. SOL and a meme coin) that allows users to trade between them. Without a pool, a token cannot be sold on a DEX.'},
+  {term:'DEX',                def:'Decentralized Exchange — a platform like Raydium, Orca or Meteora where anyone can trade tokens directly on the blockchain, without an intermediary like OKX. OKX does not control or guarantee transactions on DEXs.'},
+  {term:'Meteora',            def:'A decentralized exchange (DEX) on Solana known for concentrated liquidity pools. Similar to Raydium and Orca — it\'s where users provide and trade liquidity directly on the blockchain.'},
+  {term:'Raydium',            def:'One of the largest DEXs on Solana. Provides automated market making (AMM) and is commonly used for token launches and liquidity pools.'},
+  {term:'Orca',               def:'A user-friendly DEX on Solana focused on concentrated liquidity. Often used for stablecoin pairs and more established tokens.'},
+  {term:'PumpSwap',           def:'The DEX associated with pump.fun — a Solana launchpad where meme coins are created. Most tokens from pump.fun trade initially on PumpSwap.'},
+  {term:'Pump & Dump',        def:'A market manipulation scheme where a token\'s price is artificially inflated (pump) through coordinated buying, then the manipulators sell (dump), crashing the price and leaving other holders with losses.'},
+  {term:'Wash Trading',       def:'Artificial trading activity created by buying and selling between wallets controlled by the same person, to simulate volume and fool other traders into thinking there is real interest.'},
+  {term:'Mint Authority',     def:'The ability to create new tokens. If the mint authority is not revoked, the creator can print unlimited tokens and dilute all holders.'},
+  {term:'SPL Token',          def:'The Solana token standard — similar to ERC-20 on Ethereum. All tokens on Solana (USDC, USDT, meme coins) are SPL tokens.'},
+];
+
+// Tooltip helper — inserts an info icon with hover definition
+function tip(text){
+  return '<span class="tip" data-tip="'+text.replace(/"/g,'&quot;')+'">ⓘ</span>';
+}
 function fmt(n){
   if(n==null||isNaN(n)) return '—';
   if(n>=1e6) return '$'+(n/1e6).toFixed(2)+'M';
@@ -466,6 +518,16 @@ var FLAG_SHORT={
 };
 
 function renderFlags(flags){
+  // Tooltip definitions for key terms used in flag descriptions
+  var termTips={
+    'FDV':        'Fully Diluted Valuation — theoretical total market cap if 100% of supply were in circulation.',
+    'liquidity':  'Amount of funds available in the pool for trading. Low liquidity means sells can fail or collapse the price.',
+    'Market Cap': 'Current value of all tokens in circulation.',
+    'wash trading':'Artificial buy/sell activity between wallets of the same operator to simulate fake volume.',
+    'pump':       'Artificial price inflation through coordinated buying — usually followed by a sudden sell-off (dump).',
+    'rug pull':   'Fraud where creators remove all liquidity, making it impossible for holders to sell.',
+    'SOL':        'Native token of the Solana blockchain. Used as the counterpart in most Solana liquidity pools.',
+  };
   return flags.map(function(f){
     var fs=FLAG_STYLE[f.key]||FLAG_STYLE.OK;
     return '<div class="flag-item" style="background:'+fs.bg+';border:0.5px solid '+fs.border+'">'
@@ -702,6 +764,47 @@ function buildConclusion(risk){
     clientText='Automated checks indicate no fraud. Proceed normally with client support.';
   }
 
+  // ── Suggested approach block for high-severity scenarios
+  var suggestedHtml='';
+  var showSuggested = rugCount===total || risk.score>=80 || flags.indexOf('PUMP_DUMP')>=0;
+  var isAllRug = rugCount===total;
+  var isCritical = risk.score>=80;
+
+  if(showSuggested){
+    var dexTip='A decentralized exchange (DEX) is a platform where anyone trades directly on the blockchain — OKX does not control or guarantee these transactions.';
+    if(isAllRug){
+      suggestedHtml='<div class="suggested-approach">'
+        +'<div class="suggested-approach-title">Suggested approach with client</div>'
+        +'<div class="suggested-approach-text">'
+        +'"We have reviewed the token you mentioned. Unfortunately, the liquidity from this token\'s pools has been removed, which means it is currently not possible to sell or trade it on any decentralized exchange.'
+        +'<br><br>It\'s important to note that this token trades on decentralized exchanges (DEXs)'+tip(dexTip)+', which operate independently from OKX on the blockchain. OKX does not process or control transactions on decentralized platforms and is not able to intervene, reverse, or recover funds affected by liquidity removal.'
+        +'<br><br>We understand this is a difficult situation. If you have further questions, we\'re here to help."'
+        +'</div>'
+        +'<div class="suggested-approach-note">⚠ Adapt tone as needed. Do not state it is definitively a fraud unless the client asks directly — say the liquidity was removed and selling is not currently possible.</div>'
+        +'</div>';
+    } else if(isCritical){
+      suggestedHtml='<div class="suggested-approach">'
+        +'<div class="suggested-approach-title">Suggested approach with client</div>'
+        +'<div class="suggested-approach-text">'
+        +'"We have reviewed the token you mentioned and identified several high-risk signals, including very low liquidity and unusual trading patterns. At this time, we are not able to confirm a safe or predictable outcome for a sell.'
+        +'<br><br>Please be aware that this token trades on decentralized exchanges (DEXs)'+tip(dexTip)+', which operate independently from OKX. OKX does not control or guarantee transactions on decentralized platforms.'
+        +'<br><br>We strongly recommend verifying the token\'s current status on Solscan before attempting any transaction. If you choose to proceed, please be aware of the significant risk of loss."'
+        +'</div>'
+        +'<div class="suggested-approach-note">⚠ Do not confirm any specific sell value. Leave the final decision with the client.</div>'
+        +'</div>';
+    } else {
+      suggestedHtml='<div class="suggested-approach">'
+        +'<div class="suggested-approach-title">Suggested approach with client</div>'
+        +'<div class="suggested-approach-text">'
+        +'"We have reviewed this token and identified a pump & dump pattern — the price rose sharply and has since dropped significantly, with very little trading activity remaining. The value shown in your wallet may not reflect what you would actually receive if you sell.'
+        +'<br><br>This token trades on decentralized exchanges (DEXs)'+tip(dexTip)+', which are independent from OKX. We are not able to control or guarantee outcomes for trades on decentralized platforms.'
+        +'<br><br>If you choose to sell, please be fully aware of the risk of receiving significantly less than the displayed value."'
+        +'</div>'
+        +'<div class="suggested-approach-note">⚠ Do not guarantee any outcome. Inform the client factually and let them decide.</div>'
+        +'</div>';
+    }
+  }
+
   return '<div class="conclusion-inline">'
     +'<div class="conclusion-inline-title">Conclusion</div>'
     +'<div class="conclusion-inline-text">'+conclusionText+'</div>'
@@ -709,7 +812,9 @@ function buildConclusion(risk){
     +'<div class="conclusion-inline-client">'
     +'<div class="conclusion-inline-client-label" style="color:'+clientColor+'">'+clientLabel+'</div>'
     +'<div class="conclusion-inline-client-text" style="color:'+clientColor+'cc">'+clientText+'</div>'
-    +'</div></div>';
+    +'</div>'
+    +suggestedHtml
+    +'</div>';
 }
 
 function renderConsolidatedCard(risk,tokenAddr,tokenName,tokenSym,dexUrl){
@@ -730,11 +835,13 @@ function renderConsolidatedCard(risk,tokenAddr,tokenName,tokenSym,dexUrl){
 
   var VISIBLE=5;
   var poolRowHtml=function(ps,i){
+    var isZeroLiq=ps.level.level==='FRAUD';
     return '<div class="pool-status-row">'
       +'<div class="pool-dot" style="background:'+ps.level.color+'"></div>'
       +'<span style="color:#888;cursor:pointer;text-decoration:underline;text-decoration-color:#333" onclick="switchTab('+i+')" title="View pool analysis">Pool '+(i+1)+' · '+ps.dex+'</span>'
       +'<a class="pool-row-link" href="https://solscan.io/account/'+ps.pairAddr+'" target="_blank">'+shortAddr(ps.pairAddr)+' ↗</a>'
-      +(ps.isSecondary?'<span class="context-note">Secondary</span>':'')
+      +(isZeroLiq?'<span style="font-size:10px;color:#E24B4A;background:#E24B4A11;border:0.5px solid #E24B4A33;border-radius:4px;padding:2px 6px;flex-shrink:0">⚠ Zero Liquidity</span>':'')
+      +(ps.isSecondary&&!isZeroLiq?'<span class="context-note">Secondary</span>':'')
       +'<span style="color:'+ps.level.color+';margin-left:auto">'+fmt(ps.liq)+' · '+ps.level.label+'</span>'
       +'</div>';
   };
@@ -880,9 +987,9 @@ function renderPairContent(p,flags,lv,score,tokenAddr,idx,fdv,mkt,isSecondary,ri
   html+='<div class="card"><div class="card-title">Supply Out of Circulation</div>'+renderSupply(fdv,mkt)+'</div>';
 
   html+='<div class="card"><div class="card-title">Market Cap</div><div class="grid4">'
-    +statCard('Market Cap',fmt(mkt))+statCard('FDV',fmt(fdv))
+    +statCard('Market Cap',fmt(mkt))+statCard('FDV '+tip('Fully Diluted Valuation — theoretical total market cap if 100% of supply were circulating. Very high FDV vs low liquidity means the "value" exists mainly on paper.'),fmt(fdv))
     +statCard('Pair created',timeAgo(p.pairCreatedAt),age<1?'#E24B4A':age<7?'#EF9F27':'#e0e0e0',ageAlert)
-    +statCard('DEX',p.dexId||'—')
+    +statCard('DEX '+tip('Decentralized Exchange — platform where anyone trades directly on-chain. OKX does not control or guarantee transactions on DEXs.'),p.dexId||'—')
     +'</div>'
     +(fdv>0&&mkt>0&&Math.abs(fdv-mkt)/fdv<0.01?'<div style="margin-top:8px;font-size:11px;color:#7F77DD;background:#10102a;border:0.5px solid #303070;border-radius:6px;padding:6px 10px">FDV = Market Cap — 100% of supply has been circulating since launch</div>':'')
     +'</div>';
@@ -992,6 +1099,18 @@ function renderKnownToken(addr,token){
     +'<a class="token-strip-link" href="https://web3.okx.com/en/token/solana/'+addr+'" target="_blank" style="padding:7px 14px;border-radius:8px;border:0.5px solid '+c+'44;color:'+c+';background:'+c+'11;font-size:12px">OKX Web3 ↗</a>'
     +'</div>'
     +'</div>';
+}
+
+function toggleGlossary(){
+  var body=document.getElementById('glossaryBody');
+  var arrow=document.getElementById('glossaryArrow');
+  var open=body.classList.toggle('open');
+  arrow.textContent=open?'↑':'↓';
+  if(open&&!body.innerHTML){
+    body.innerHTML=GLOSSARY.map(function(g){
+      return '<div class="glossary-item"><div class="glossary-term">'+g.term+'</div><div class="glossary-def">'+g.def+'</div></div>';
+    }).join('');
+  }
 }
 
 function reanalyze(){if(currentAddress){document.getElementById('addressInput').value=currentAddress;analyze();}}
