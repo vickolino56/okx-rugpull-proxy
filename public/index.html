@@ -267,6 +267,8 @@ var GLOSSARY=[
 function tip(text){
   return '<span class="tip" data-tip="'+text.replace(/"/g,'&quot;')+'">ⓘ</span>';
 }
+
+function isValidSolanaAddress(a){return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(a);}
 function fmt(n){
   if(n==null||isNaN(n)) return '—';
   if(n>=1e6) return '$'+(n/1e6).toFixed(2)+'M';
