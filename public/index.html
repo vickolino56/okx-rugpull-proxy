@@ -770,14 +770,15 @@ function buildConclusion(risk){
   var isAllRug = rugCount===total;
   var isCritical = risk.score>=80;
 
+  var dexTipHtml='<span class="tip" data-tip="A decentralized exchange (DEX) is a platform where anyone trades directly on the blockchain — OKX does not control or guarantee these transactions.">ⓘ</span>';
+
   if(showSuggested){
-    var dexTip='A decentralized exchange (DEX) is a platform where anyone trades directly on the blockchain — OKX does not control or guarantee these transactions.';
     if(isAllRug){
       suggestedHtml='<div class="suggested-approach">'
         +'<div class="suggested-approach-title">Suggested approach with client</div>'
         +'<div class="suggested-approach-text">'
         +'"We have reviewed the token you mentioned. Unfortunately, the liquidity from this token\'s pools has been removed, which means it is currently not possible to sell or trade it on any decentralized exchange.'
-        +'<br><br>It\'s important to note that this token trades on decentralized exchanges (DEXs)'+tip(dexTip)+', which operate independently from OKX on the blockchain. OKX does not process or control transactions on decentralized platforms and is not able to intervene, reverse, or recover funds affected by liquidity removal.'
+        +'<br><br>It\'s important to note that this token trades on decentralized exchanges (DEXs) '+dexTipHtml+', which operate independently from OKX on the blockchain. OKX does not process or control transactions on decentralized platforms and is not able to intervene, reverse, or recover funds affected by liquidity removal.'
         +'<br><br>We understand this is a difficult situation. If you have further questions, we\'re here to help."'
         +'</div>'
         +'<div class="suggested-approach-note">⚠ Adapt tone as needed. Do not state it is definitively a fraud unless the client asks directly — say the liquidity was removed and selling is not currently possible.</div>'
@@ -787,7 +788,7 @@ function buildConclusion(risk){
         +'<div class="suggested-approach-title">Suggested approach with client</div>'
         +'<div class="suggested-approach-text">'
         +'"We have reviewed the token you mentioned and identified several high-risk signals, including very low liquidity and unusual trading patterns. At this time, we are not able to confirm a safe or predictable outcome for a sell.'
-        +'<br><br>Please be aware that this token trades on decentralized exchanges (DEXs)'+tip(dexTip)+', which operate independently from OKX. OKX does not control or guarantee transactions on decentralized platforms.'
+        +'<br><br>Please be aware that this token trades on decentralized exchanges (DEXs) '+dexTipHtml+', which operate independently from OKX. OKX does not control or guarantee transactions on decentralized platforms.'
         +'<br><br>We strongly recommend verifying the token\'s current status on Solscan before attempting any transaction. If you choose to proceed, please be aware of the significant risk of loss."'
         +'</div>'
         +'<div class="suggested-approach-note">⚠ Do not confirm any specific sell value. Leave the final decision with the client.</div>'
@@ -797,7 +798,7 @@ function buildConclusion(risk){
         +'<div class="suggested-approach-title">Suggested approach with client</div>'
         +'<div class="suggested-approach-text">'
         +'"We have reviewed this token and identified a pump & dump pattern — the price rose sharply and has since dropped significantly, with very little trading activity remaining. The value shown in your wallet may not reflect what you would actually receive if you sell.'
-        +'<br><br>This token trades on decentralized exchanges (DEXs)'+tip(dexTip)+', which are independent from OKX. We are not able to control or guarantee outcomes for trades on decentralized platforms.'
+        +'<br><br>This token trades on decentralized exchanges (DEXs) '+dexTipHtml+', which are independent from OKX. We are not able to control or guarantee outcomes for trades on decentralized platforms.'
         +'<br><br>If you choose to sell, please be fully aware of the risk of receiving significantly less than the displayed value."'
         +'</div>'
         +'<div class="suggested-approach-note">⚠ Do not guarantee any outcome. Inform the client factually and let them decide.</div>'
@@ -986,10 +987,13 @@ function renderPairContent(p,flags,lv,score,tokenAddr,idx,fdv,mkt,isSecondary,ri
 
   html+='<div class="card"><div class="card-title">Supply Out of Circulation</div>'+renderSupply(fdv,mkt)+'</div>';
 
+  var fdvLabel='FDV <span class="tip" data-tip="Fully Diluted Valuation — theoretical total market cap if 100% of supply were circulating. Very high FDV vs low liquidity means the value exists mainly on paper.">ⓘ</span>';
+  var dexLabel='DEX <span class="tip" data-tip="Decentralized Exchange — platform where anyone trades directly on-chain. OKX does not control or guarantee transactions on DEXs.">ⓘ</span>';
+
   html+='<div class="card"><div class="card-title">Market Cap</div><div class="grid4">'
-    +statCard('Market Cap',fmt(mkt))+statCard('FDV '+tip('Fully Diluted Valuation — theoretical total market cap if 100% of supply were circulating. Very high FDV vs low liquidity means the "value" exists mainly on paper.'),fmt(fdv))
+    +statCard('Market Cap',fmt(mkt))+statCard(fdvLabel,fmt(fdv))
     +statCard('Pair created',timeAgo(p.pairCreatedAt),age<1?'#E24B4A':age<7?'#EF9F27':'#e0e0e0',ageAlert)
-    +statCard('DEX '+tip('Decentralized Exchange — platform where anyone trades directly on-chain. OKX does not control or guarantee transactions on DEXs.'),p.dexId||'—')
+    +statCard(dexLabel,p.dexId||'—')
     +'</div>'
     +(fdv>0&&mkt>0&&Math.abs(fdv-mkt)/fdv<0.01?'<div style="margin-top:8px;font-size:11px;color:#7F77DD;background:#10102a;border:0.5px solid #303070;border-radius:6px;padding:6px 10px">FDV = Market Cap — 100% of supply has been circulating since launch</div>':'')
     +'</div>';
